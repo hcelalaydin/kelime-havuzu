@@ -29,4 +29,12 @@
 
 ## Yayın sınırları
 
-Canlı servis/alan adı henüz açılmadı. Üretimde tek replika ve kalıcı disk gerekir. Render şablonu ücretli altyapı tanımlar; maliyet oluşturan işlem yapılmadı. Fiziksel cihaz ve gerçek hosting üzerindeki HTTPS/proxy kontrolü yayında tekrar yapılmalıdır. Otomatik testler tüm olası hataların yokluğunu garanti etmez.
+Canlı servis https://kelimehavuzu.pqcrypt.xyz adresinde systemd ve Nginx üzerinden açık; DNS yayılımı için http://202.92.21.56 erişimi de etkin. Tek süreç, özel kalıcı kayıt dizini ve otomatik TLS yenilemesi kullanılıyor. Dört oyunculu canlı proxy testi ve servis restart sonrası oturum/havuz dönüşü doğrulandı. Fiziksel telefon testi yapılmadı; mobil Chromium ve WebKit emülasyonu kullanıldı.
+
+## HTTP üzerinden oda oluşturma düzeltmesi — 11 Ekim 2026
+
+- Canlı IP adresinde gerçek HTTP bağlamında `crypto.randomUUID is not a function` hatası yeniden üretildi: buton disabled kalıyordu. Bağlantı zaten aynı origin üzerinden gidiyordu; sabit alan adı çağrısı yoktu.
+- HTTPS gerektirmeyen `getRandomValues` ile UUID üretimi eklendi. Komut üretimi try/finally içine alındı; istemci hatası açık mesaj döndürür ve komut/buton kilidi temizlenir. Aynı kimlikle ağ tekrar denemesi korunur.
+- Socket.IO alternatif transport denemesini destekler. Giriş formu aria-busy kullanır ve sonuçtan bağımsız butonu açar.
+- 35 birim/entegrasyon testi ve 15 tarayıcı senaryosunun tamamı geçti (masaüstü Chromium, mobil Chromium, mobil WebKit). Canlı HTTP IP üzerinde masaüstü Chromium, mobil Chromium ve mobil WebKit ile oda oluşturma, katılma ve reload sonrası dönüş doğrulandı; HTTPS üzerinden oda oluşturma da geçti.
+- `ecd9e3c` ön yüzü canlıdaki `f2f4f6d` sunucusuna atomik dosya değişimiyle uygulandı; aktif oyunları kesmemek için restart yapılmadı. Önceki dosya özel hotfix-backups dizininde, sürüm işareti `/opt/kelime-havuzu/frontend-version` içinde.
