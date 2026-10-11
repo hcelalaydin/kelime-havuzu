@@ -1,318 +1,352 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta name="description" content="Kelime Havuzu — Gerçek zamanlı çok oyunculu kelime tahmin oyunu. Takım arkadaşlarınla kelime havuzundan kelimeleri anlat, tahmin et ve kazan!">
-  <title>Kelime Havuzu — Multiplayer Kelime Oyunu</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <!-- ═══════════════════════════════════════ -->
-  <!-- ANA EKRAN                              -->
-  <!-- ═══════════════════════════════════════ -->
-  <div id="home-screen" class="screen active">
-    <div class="home-container">
-      <div class="logo-section">
-        <h1 class="logo-title">🎲 Kelime Havuzu</h1>
-        <p class="logo-subtitle">Arkadaşlarınla kelime eğlencesi</p>
-      </div>
-
-      <div class="home-actions">
-        <!-- Oda Oluştur -->
-        <div class="card" id="create-section">
-          <h2>Yeni Oda Oluştur</h2>
-          <input type="text" id="create-nickname" class="input" placeholder="Takma adın" maxlength="20" autocomplete="off">
-          <button id="btn-create" class="btn btn-primary btn-large">Oda Oluştur</button>
-        </div>
-
-        <div class="divider"><span>veya</span></div>
-
-        <!-- Odaya Katıl -->
-        <div class="card" id="join-section">
-          <h2>Odaya Katıl</h2>
-          <input type="text" id="join-code" class="input" placeholder="Oda kodu (6 hane)" maxlength="6" autocomplete="off" style="text-transform: uppercase; letter-spacing: 4px; text-align: center; font-size: 1.25rem;">
-          <input type="text" id="join-nickname" class="input" placeholder="Takma adın" maxlength="20" autocomplete="off">
-          <div class="team-select">
-            <button class="btn btn-team btn-red active" id="join-team-red" data-team="red">🔴 Kırmızı</button>
-            <button class="btn btn-team btn-blue" id="join-team-blue" data-team="blue">🔵 Mavi</button>
+<!doctype html>
+<html lang="tr" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f4ed" />
+    <meta
+      name="description"
+      content="Bir fanus, iki takım, dört farklı anlatım. Kelimelerini yaz; arkadaşlarınla Kelime Havuzu oyna."
+    />
+    <title>Kelime Havuzu | Bir fanus dolusu eğlence</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🫙%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Oyuna geç</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Kelime Havuzu ana sayfa"
+        ><span aria-hidden="true">🫙</span> kelime<span class="brand-light">havuzu</span></a
+      >
+      <nav aria-label="Yardım ve görünüm">
+        <button id="rules-button" class="quiet">Nasıl oynanır?</button>
+        <button
+          id="sound-button"
+          class="icon-button"
+          aria-label="Oyun seslerini aç"
+          aria-pressed="false"
+        >
+          ♪
+        </button>
+        <button
+          id="theme-button"
+          class="icon-button"
+          aria-label="Gece temasını aç"
+          aria-pressed="false"
+        >
+          ☾
+        </button>
+      </nav>
+    </header>
+    <div id="connection" class="connection" role="status" hidden></div>
+    <main id="main" tabindex="-1">
+      <section id="home-screen" class="screen home-screen">
+        <div class="home-story">
+          <span class="eyebrow">AYNI KELİMELER. BAMBAŞKA HİKÂYELER.</span>
+          <h1>Bir fanus dolusu<br /><span class="accent">“Nasıl anlatsam?”</span></h1>
+          <p class="lead">
+            Kelimeleri katla, fanusa at.<br />Arkadaşlarını topla, anlatmaya başla.
+          </p>
+          <div class="home-illustration" aria-hidden="true">
+            <span class="floating-note note-one">Sessizce anlat!</span>
+            <div class="jar hero-jar">
+              <div class="jar-rim"></div>
+              <div id="hero-papers" class="papers"></div>
+              <div class="jar-shine"></div>
+              <div class="jar-face">⌣</div>
+            </div>
+            <span class="floating-note note-two">Sadece bir kelime.</span>
+            <span class="jar-shadow"></span>
           </div>
-          <button id="btn-join" class="btn btn-primary btn-large">Katıl</button>
+          <p class="small home-caption">4–32 arkadaş · 2 takım · 4 aşama · Pas yok</p>
         </div>
-      </div>
-
-      <!-- Kurallar -->
-      <button id="btn-rules" class="btn btn-ghost">📖 Nasıl Oynanır?</button>
-
-      <!-- Son oyuna dön -->
-      <div id="rejoin-section" class="card rejoin-card" style="display: none;">
-        <p>Son oyununa geri dönmek ister misin?</p>
-        <button id="btn-rejoin" class="btn btn-secondary">🔄 Geri Dön</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════ -->
-  <!-- LOBİ EKRANI                            -->
-  <!-- ═══════════════════════════════════════ -->
-  <div id="lobby-screen" class="screen">
-    <div class="lobby-container">
-      <!-- Oda Kodu -->
-      <div class="room-code-section">
-        <p class="room-code-label">Oda Kodu</p>
-        <div class="room-code-display">
-          <span id="lobby-room-code">------</span>
-          <button id="btn-copy-code" class="btn btn-icon" title="Kodu Kopyala">📋</button>
+        <div class="entry-card">
+          <div class="tab-list" role="tablist" aria-label="Oyuna giriş">
+            <button id="create-tab" role="tab" aria-controls="entry-form" aria-selected="true">
+              Oda oluştur
+            </button>
+            <button id="join-tab" role="tab" aria-controls="entry-form" aria-selected="false">
+              Odaya katıl
+            </button>
+          </div>
+          <form id="entry-form">
+            <h2 id="entry-title">Masa senin, davet senden.</h2>
+            <p id="entry-subtitle" class="muted">Odanı aç, kodunu arkadaşlarınla paylaş.</p>
+            <label for="nickname">Sana ne diyelim?</label>
+            <input
+              id="nickname"
+              name="nickname"
+              placeholder="Takma adın"
+              minlength="2"
+              maxlength="20"
+              autocomplete="nickname"
+              required
+            />
+            <fieldset class="avatar-field">
+              <legend>Masadaki karakterin</legend>
+              <div id="avatars" class="avatar-picker"></div>
+            </fieldset>
+            <div id="join-fields" hidden>
+              <label for="room-code">Oda kodu</label>
+              <input
+                id="room-code"
+                name="roomCode"
+                class="code-input"
+                placeholder="6 KARAKTER"
+                maxlength="6"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+              />
+              <fieldset>
+                <legend>Hangi takımdasın?</legend>
+                <div class="team-picker">
+                  <label><input type="radio" name="team" value="red" checked /> Kırmızı takım</label
+                  ><label><input type="radio" name="team" value="blue" /> Mavi takım</label>
+                </div>
+              </fieldset>
+            </div>
+            <p id="entry-error" class="error-text" role="alert"></p>
+            <button id="entry-submit" class="primary wide" type="submit">
+              Fanusu masaya koy <span aria-hidden="true">↗</span>
+            </button>
+            <p class="small centered">Üyelik yok. Herkes kendi telefonundan katılsın.</p>
+          </form>
+          <div id="restore-box" class="restore-box" hidden>
+            <p>Masada yerin duruyor.</p>
+            <button id="restore-button" class="secondary">Oyunuma geri dön</button
+            ><button id="forget-button" class="quiet">Kaydı unut</button>
+          </div>
         </div>
-      </div>
-
-      <!-- Ayarlar (Admin) -->
-      <div id="settings-section" class="card settings-card">
-        <h3>⚙️ Oyun Ayarları</h3>
-        <div class="setting-row">
-          <label for="setting-words">Kişi başı kelime:</label>
-          <select id="setting-words" class="select">
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-            <option value="9">9</option>
-            <option value="10">10</option>
-          </select>
+        <div class="phase-preview" aria-label="Dört oyun aşaması">
+          <span>💬 Serbest anlat</span><span>☝️ Tek kelime</span><span>🎭 Sessiz sinema</span
+          ><span>🎵 Sadece ses</span>
         </div>
-        <div class="setting-row">
-          <label for="setting-duration">Tur süresi:</label>
-          <select id="setting-duration" class="select">
-            <option value="30">30 sn</option>
-            <option value="45">45 sn</option>
-            <option value="60" selected>60 sn</option>
-            <option value="90">90 sn</option>
-            <option value="120">120 sn</option>
-          </select>
+      </section>
+
+      <section id="lobby-screen" class="screen" hidden>
+        <div class="room-heading">
+          <div>
+            <span class="eyebrow">MASA HAZIRLANIYOR</span>
+            <h1>Kelimeler fanusa!</h1>
+          </div>
+          <div class="invite">
+            <span class="small">Oda kodu</span><strong id="lobby-code"></strong
+            ><button id="copy-invite" class="secondary">Davet bağlantısını kopyala</button>
+          </div>
         </div>
-      </div>
-
-      <!-- Takımlar -->
-      <div class="teams-container">
-        <div class="team-column team-red-col">
-          <h3 class="team-header team-red-header">🔴 Kırmızı Takım</h3>
-          <ul id="team-red-list" class="player-list"></ul>
+        <p id="lobby-notice" class="notice" role="status"></p>
+        <div class="preparation-grid">
+          <div class="pool-panel">
+            <div class="pool-header">
+              <h2>Ortak fanus</h2>
+              <span id="player-count" class="tag"></span>
+            </div>
+            <div class="jar-stage">
+              <div id="lobby-jar" class="jar" role="img" aria-label="Boş kelime fanusu">
+                <div class="jar-rim"></div>
+                <div id="lobby-papers" class="papers"></div>
+                <div class="jar-shine"></div>
+                <div class="jar-face" aria-hidden="true">⌣</div>
+              </div>
+              <span class="jar-shadow"></span>
+            </div>
+            <p class="pool-number">
+              <strong id="pool-count">0</strong><span id="pool-target"> / 20 kelime</span>
+            </p>
+            <p id="pool-remaining" class="muted centered"></p>
+            <p class="small centered">Kâğıtlar kapalı. Kelimelerin yalnızca sende görünür.</p>
+          </div>
+          <div class="writing-panel">
+            <div class="section-heading">
+              <h2>Senin kâğıtların</h2>
+              <span id="my-progress" class="tag"></span>
+            </div>
+            <p id="writing-hint" class="muted">
+              Bir nesne, bir karakter, bir cümle… Arkadaşlarının anlatabileceği şeyler yaz.
+            </p>
+            <form id="words-form">
+              <div id="word-inputs" class="word-inputs"></div>
+              <div class="save-status">
+                <span id="draft-status" role="status">Yazdıkların otomatik kaydedilir.</span>
+              </div>
+              <button id="submit-words" class="primary wide" type="submit">Kâğıtlarım hazır</button>
+            </form>
+            <div id="submitted-box" class="submitted-box" hidden>
+              <span aria-hidden="true">✓</span>
+              <h3>Kâğıtların fanusta.</h3>
+              <p>Herkes hazır olduğunda yönetici oyunu başlatacak.</p>
+              <button id="edit-words" class="secondary">Kelimelerimi düzenle</button>
+            </div>
+          </div>
         </div>
-        <div class="team-column team-blue-col">
-          <h3 class="team-header team-blue-header">🔵 Mavi Takım</h3>
-          <ul id="team-blue-list" class="player-list"></ul>
+        <div class="teams-grid">
+          <section class="team-panel red">
+            <div class="section-heading">
+              <h2>Kırmızı takım</h2>
+              <span id="red-count"></span>
+            </div>
+            <ul id="red-players" class="player-list"></ul>
+          </section>
+          <section class="team-panel blue">
+            <div class="section-heading">
+              <h2>Mavi takım</h2>
+              <span id="blue-count"></span>
+            </div>
+            <ul id="blue-players" class="player-list"></ul>
+          </section>
         </div>
-      </div>
-
-      <!-- Min oyuncu uyarısı -->
-      <div id="min-players-warning" class="warning-banner" style="display: none;">
-        ⚠️ Her takımda en az 2 oyuncu olmalıdır!
-      </div>
-
-      <!-- Aksiyonlar -->
-      <div class="lobby-actions">
-        <button id="btn-switch-team" class="btn btn-secondary">🔄 Takım Değiştir</button>
-        <button id="btn-write-words" class="btn btn-primary">✏️ Kelimelerimi Yaz</button>
-        <button id="btn-start-game" class="btn btn-success btn-large" style="display: none;">🚀 Oyunu Başlat</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════ -->
-  <!-- KELİME GİRİŞ EKRANI                   -->
-  <!-- ═══════════════════════════════════════ -->
-  <div id="word-entry-screen" class="screen">
-    <div class="word-entry-container">
-      <h2>✏️ Kelimelerini Yaz</h2>
-      <p id="word-entry-info" class="info-text">5 kelime yazman gerekiyor</p>
-      <div id="word-inputs" class="word-inputs"></div>
-      <div class="word-entry-actions">
-        <button id="btn-back-lobby" class="btn btn-ghost">← Lobiye Dön</button>
-        <button id="btn-submit-words" class="btn btn-success btn-large" disabled>Kelimelerimi Gönder</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════ -->
-  <!-- OYUN EKRANI                            -->
-  <!-- ═══════════════════════════════════════ -->
-  <div id="game-screen" class="screen">
-    <!-- HUD (Her zaman görünür) -->
-    <div class="game-hud">
-      <div class="hud-scores">
-        <span class="score-red">🔴 <span id="hud-score-red">0</span></span>
-        <span class="score-vs">—</span>
-        <span class="score-blue">🔵 <span id="hud-score-blue">0</span></span>
-      </div>
-      <div class="hud-info">
-        <span id="hud-phase" class="hud-phase">Faz 1/4: Kelime Anlat</span>
-        <span id="hud-words-left" class="hud-words">Havuzda 20 kelime</span>
-      </div>
-      <div class="hud-describer">
-        <span id="hud-active-describer"></span>
-      </div>
-    </div>
-
-    <!-- Timer -->
-    <div class="timer-section">
-      <div id="game-timer" class="timer">60</div>
-    </div>
-
-    <!-- Faz kuralı banner -->
-    <div id="phase-rule-banner" class="phase-rule-banner">
-      <span id="phase-rule-text">🗣️ Kelime Anlat</span>
-    </div>
-
-    <!-- Oyun içeriği (rol bazlı) -->
-    <div class="game-content">
-      <!-- Anlatıcı bekliyor: Başla butonu -->
-      <div id="describer-waiting" class="game-role" style="display: none;">
-        <div class="role-message">
-          <h2>🎯 Sıra Sende!</h2>
-          <p class="phase-rule-detail" id="waiting-phase-rule"></p>
+        <div class="lobby-controls">
+          <button id="switch-team" class="secondary">Takım değiştir</button
+          ><button id="shuffle-teams" class="secondary admin-control">Takımları karıştır</button
+          ><button id="leave-lobby" class="quiet danger">Odadan ayrıl</button>
         </div>
-        <button id="btn-start-turn" class="btn btn-success btn-huge">▶️ BAŞLA</button>
-      </div>
-
-      <!-- Anlatıcı aktif: Kelime + Doğru butonu -->
-      <div id="describer-active" class="game-role" style="display: none;">
-        <div class="current-word-display">
-          <p id="current-word" class="current-word">—</p>
+        <div class="settings-panel">
+          <div>
+            <h2>Masadaki kurallar</h2>
+            <p class="small">Ayarları yönetici değiştirir.</p>
+          </div>
+          <label
+            >Kişi başı kelime<select id="setting-words">
+              <option>5</option>
+              <option>6</option>
+              <option>7</option>
+              <option>8</option>
+              <option>9</option>
+              <option>10</option>
+            </select></label
+          ><label
+            >Tur süresi<select id="setting-duration">
+              <option value="30">30 saniye</option>
+              <option value="45">45 saniye</option>
+              <option value="60">60 saniye</option>
+              <option value="90">90 saniye</option>
+              <option value="120">120 saniye</option>
+            </select></label
+          >
         </div>
-        <button id="btn-correct" class="btn btn-correct">✓ DOĞRU</button>
-      </div>
-
-      <!-- Tahmin eden takım -->
-      <div id="guesser-view" class="game-role" style="display: none;">
-        <div class="role-message">
-          <h2>🤔 Tahmin Et!</h2>
-          <p>Takım arkadaşın anlatıyor...</p>
+        <div class="start-panel">
+          <p id="start-reason" role="status"></p>
+          <button id="start-game" class="primary admin-control">Herkes hazır, başlayalım ↗</button>
         </div>
-      </div>
+      </section>
 
-      <!-- Diğer takım -->
-      <div id="spectator-view" class="game-role" style="display: none;">
-        <div class="role-message">
-          <h2>👀 İzle</h2>
-          <p id="spectator-info">Rakip takım anlatıyor...</p>
+      <section id="game-screen" class="screen" hidden>
+        <div class="game-top">
+          <div>
+            <span id="game-room" class="small"></span>
+            <h1 id="phase-title"></h1>
+          </div>
+          <div class="scoreboard" aria-label="Takım puanları">
+            <div class="red-text"><span>Kırmızı</span><strong id="score-red">0</strong></div>
+            <span class="score-separator">:</span>
+            <div class="blue-text"><span>Mavi</span><strong id="score-blue">0</strong></div>
+          </div>
         </div>
-      </div>
-
-      <!-- Diğer oyuncular bekleme -->
-      <div id="waiting-view" class="game-role" style="display: none;">
-        <div class="role-message">
-          <h2 id="waiting-msg">Hazırlanıyor...</h2>
-          <div class="loading-dots"><span>.</span><span>.</span><span>.</span></div>
+        <ol id="phase-track" class="phase-track" aria-label="Aşamalar"></ol>
+        <div class="game-layout">
+          <div class="play-area">
+            <div class="turn-header">
+              <span id="role-label" class="tag"></span
+              ><span id="remaining-count" class="small"></span>
+            </div>
+            <p id="describer-label" class="describer-label"></p>
+            <div class="timer-wrap">
+              <strong id="timer" class="timer" role="timer" aria-label="Kalan saniye">60</strong
+              ><span>saniye</span>
+            </div>
+            <p id="game-rule" class="rule-banner"></p>
+            <div id="play-content"></div>
+          </div>
+          <aside class="game-aside">
+            <h2>Masadakiler</h2>
+            <ul id="game-players" class="player-list compact"></ul>
+            <div class="aside-note">
+              <strong>Birbirinizi duyuyor musunuz?</strong>
+              <p>
+                Aynı masada oynayın veya ayrı bir sesli/görüntülü görüşme açın. Bu oyun mikrofon
+                kullanmaz.
+              </p>
+            </div>
+            <div class="game-settings">
+              <label
+                >Sonraki tur süresi<select id="game-duration">
+                  <option value="30">30 saniye</option>
+                  <option value="45">45 saniye</option>
+                  <option value="60">60 saniye</option>
+                  <option value="90">90 saniye</option>
+                  <option value="120">120 saniye</option>
+                </select></label
+              >
+              <p class="small">Değişiklik yeni turda uygulanır. Kalan süre korunur.</p>
+              <button id="pause-game" class="secondary wide admin-control">Oyunu duraklat</button
+              ><button id="reset-game" class="quiet wide admin-control">
+                Oyunu bitir, lobiye dön</button
+              ><button id="leave-game" class="quiet wide danger">Odadan ayrıl</button>
+            </div>
+          </aside>
         </div>
+      </section>
+    </main>
+    <footer><span>Birlikte oynayın. Güzel hatırlayın.</span><span>kelime havuzu</span></footer>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <dialog id="rules-dialog">
+      <div class="dialog-heading">
+        <h2>Fanusun kuralları</h2>
+        <button class="icon-button" data-close="rules-dialog" aria-label="Kuralları kapat">
+          ✕
+        </button>
       </div>
-
-      <!-- Faz geçiş geri sayımı -->
-      <div id="phase-countdown-view" class="game-role" style="display: none;">
-        <div class="role-message">
-          <h2 id="countdown-number" class="countdown-big">3</h2>
-        </div>
-      </div>
-    </div>
-
-    <!-- Ses kontrolü -->
-    <button id="btn-mute" class="btn btn-icon mute-btn" title="Sesi Aç/Kapat">🔊</button>
-  </div>
-
-  <!-- ═══════════════════════════════════════ -->
-  <!-- FAZ GEÇİŞ EKRANI                      -->
-  <!-- ═══════════════════════════════════════ -->
-  <div id="phase-transition-screen" class="screen">
-    <div class="phase-transition-container">
-      <h2 id="phase-complete-title">🎉 Faz 1 Tamamlandı!</h2>
-      <div class="phase-scores">
-        <div class="phase-score-card score-card-red">
-          <span class="team-label">🔴 Kırmızı</span>
-          <span id="pt-score-red" class="team-score">0</span>
-        </div>
-        <div class="phase-score-card score-card-blue">
-          <span class="team-label">🔵 Mavi</span>
-          <span id="pt-score-blue" class="team-score">0</span>
-        </div>
-      </div>
-      <div class="next-phase-info">
-        <h3 id="next-phase-name">Sıradaki: Faz 2 — Tek Kelime</h3>
-        <p id="next-phase-rule" class="phase-rule-detail">Sadece TEK bir kelime söyleyerek anlat!</p>
-      </div>
-      <button id="btn-next-phase" class="btn btn-primary btn-large" style="display: none;">
-        ▶️ Sonraki Faza Geç
-      </button>
-      <p id="pt-admin-wait" class="info-text">Admin sonraki faza geçmeyi onaylayacak...</p>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════ -->
-  <!-- OYUN SONU EKRANI                       -->
-  <!-- ═══════════════════════════════════════ -->
-  <div id="game-over-screen" class="screen">
-    <div class="game-over-container">
-      <div id="winner-display" class="winner-display">
-        <h1 id="winner-text" class="winner-text">🏆 Kırmızı Takım Kazandı!</h1>
-      </div>
-      <div class="final-scores">
-        <div class="final-score-card score-card-red">
-          <span class="team-label">🔴 Kırmızı</span>
-          <span id="go-score-red" class="team-score-big">0</span>
-        </div>
-        <div class="final-score-card score-card-blue">
-          <span class="team-label">🔵 Mavi</span>
-          <span id="go-score-blue" class="team-score-big">0</span>
-        </div>
-      </div>
-      <table class="phase-table">
-        <thead>
-          <tr><th>Faz</th><th>🔴</th><th>🔵</th></tr>
-        </thead>
-        <tbody id="phase-table-body"></tbody>
-      </table>
-      <div class="game-over-actions">
-        <button id="btn-new-game" class="btn btn-primary btn-large" style="display: none;">🔄 Yeni Oyun</button>
-        <button id="btn-go-home" class="btn btn-secondary">🏠 Ana Menü</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════ -->
-  <!-- KURALLAR MODAL                         -->
-  <!-- ═══════════════════════════════════════ -->
-  <div id="rules-modal" class="modal" style="display: none;">
-    <div class="modal-content">
-      <button id="btn-close-rules" class="btn btn-icon modal-close">✕</button>
-      <h2>📖 Nasıl Oynanır?</h2>
-      <div class="rules-content">
-        <p>Oyuncular iki takıma ayrılır. Herkes havuza kelimeler yazar. Sonra 4 turda aynı kelimeler farklı kurallarla anlatılır.</p>
-        <div class="rule-phase">
-          <strong>🗣️ Faz 1 — Kelime Anlat</strong>
+      <p>
+        Herkes 5–10 kelime ya da kısa ifade yazar. En az ikişer kişilik iki takım kurulur; 5, 7 veya
+        daha fazla kişiyle takımlar farklı büyüklükte olabilir.
+      </p>
+      <ol class="rules-list">
+        <li>
+          <strong>💬 Kelime Anlat</strong>
           <p>Kelimeyi ve içindeki sözcükleri kullanmadan serbest cümlelerle anlat.</p>
-        </div>
-        <div class="rule-phase">
-          <strong>☝️ Faz 2 — Tek Kelime</strong>
-          <p>Sadece TEK bir kelime söyleyerek anlat.</p>
-        </div>
-        <div class="rule-phase">
-          <strong>🤫 Faz 3 — Sessiz Sinema</strong>
-          <p>Hiç konuşmadan, sadece jest ve mimiklerle anlat.</p>
-        </div>
-        <div class="rule-phase">
-          <strong>🔊 Faz 4 — Ses ile Anlat</strong>
-          <p>Kelime/cümle kullanmadan, sadece sesler çıkararak anlat.</p>
-        </div>
-        <p class="rules-note">⚠️ Pas geçmek yok! Her kelimeyi anlatmak zorundasın.</p>
+        </li>
+        <li>
+          <strong>☝️ Tek Kelime</strong>
+          <p>Yalnızca bir kelimelik ipucu söyle.</p>
+        </li>
+        <li>
+          <strong>🎭 Sessiz Sinema</strong>
+          <p>Konuşmadan, yalnızca jest ve mimiklerle anlat.</p>
+        </li>
+        <li>
+          <strong>🎵 Ses ile Anlat</strong>
+          <p>Kelime kullanmadan, yalnızca sesler çıkar.</p>
+        </li>
+      </ol>
+      <p>
+        Her doğru 1 puan. <strong>Pas yok.</strong> Süre bitince sıra diğer takıma geçer. Fanus
+        bitince aynı kelimeler yeni aşamada geri gelir; anlatıcı kalan süresiyle devam eder.
+      </p>
+      <p>
+        Kelimeyi anlatıcı ve rakip takım görür. Rakip, yasak anlatıma itiraz edebilir; süre durur,
+        yönetici karar verir. İhlal varsa o kelime bu aşamada puan getirmez. Son doğru kelimeye 5
+        saniye içinde de itiraz edilebilir.
+      </p>
+      <p>
+        İlk takım kura ile seçilir. Dört aşamanın toplam puanı kazananı belirler. Beraberlik
+        mümkündür.
+      </p>
+      <button class="primary wide" data-close="rules-dialog">Anlaştık!</button>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-message"></p>
+      <div class="dialog-actions">
+        <button id="confirm-cancel" class="secondary">Vazgeç</button
+        ><button id="confirm-ok" class="primary">Onayla</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Hata bildirimi (toast) -->
-  <div id="toast" class="toast" style="display: none;"></div>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js"></script>
-</body>
+    </dialog>
+    <noscript>Kelime Havuzu için tarayıcının JavaScript özelliğini açmalısın.</noscript>
+  </body>
 </html>

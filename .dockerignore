@@ -1,0 +1,8 @@
+node_modules
+.git
+.agent
+.env
+state
+test
+test-results
+playwright-report

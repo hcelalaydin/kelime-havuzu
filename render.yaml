@@ -1,0 +1,26 @@
+# This blueprint provisions a PAID web service and persistent disk.
+# Review Render's displayed price before creating the service.
+services:
+  - type: web
+    name: kelime-havuzu
+    runtime: node
+    plan: 0.5c-512mb
+    region: frankfurt
+    numInstances: 1
+    buildCommand: npm ci --omit=dev --ignore-scripts
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: NODE_ENV
+        value: production
+      - key: STATE_DIR
+        value: /opt/render/project/src/state
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+    disk:
+      name: game-state
+      mountPath: /opt/render/project/src/state
+      sizeGB: 1
