@@ -235,3 +235,45 @@ test('four complete phases end at 80 points and new game clears all screens', as
     for (const c of contexts) await c.close();
   }
 });
+
+test('HTTP-compatible IDs create and join rooms; client failure remains retryable', async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  await context.addInitScript(() => {
+    Object.defineProperty(Crypto.prototype, 'randomUUID', { value: undefined, configurable: true });
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  try {
+    const code = await createRoom(page, 'HTTP yönetici');
+    const guest = await context.newPage();
+    await joinRoom(guest, code, 'HTTP misafir', 'blue');
+    await expect(page.locator('#player-count')).toContainText('2');
+    const failing = await context.newPage();
+    await failing.goto('/');
+    await expect(failing.locator('#connection')).toBeHidden();
+    await failing.locator('#nickname').fill('Tekrar deneyen');
+    await failing.evaluate(() => {
+      const original = crypto.getRandomValues.bind(crypto);
+      Object.defineProperty(crypto, 'getRandomValues', {
+        configurable: true,
+        value() {
+          throw new Error('Simulated browser failure');
+        },
+      });
+      window.restoreRandom = () =>
+        Object.defineProperty(crypto, 'getRandomValues', { value: original });
+    });
+    await failing.locator('#entry-submit').click();
+    await expect(failing.locator('#entry-error')).toContainText('İşlem gönderilemedi');
+    await expect(failing.locator('#entry-submit')).toBeEnabled();
+    await failing.evaluate(() => window.restoreRandom());
+    await failing.locator('#entry-submit').click();
+    await expect(failing.locator('#lobby-screen')).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});

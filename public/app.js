@@ -1,6 +1,21 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
-const socket = io({ autoConnect: false, reconnectionDelay: 500, reconnectionDelayMax: 4000 });
+const socket = io({
+  autoConnect: false,
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 4000,
+  tryAllTransports: true,
+});
+// getRandomValues also works on HTTP IP addresses, unlike randomUUID.
+function requestId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 const avatars = [
   'fox',
   'bear',
@@ -167,9 +182,9 @@ async function command(type, payload = {}, { quiet = false, restoring = false } 
   }
   if (busy.has(type)) return null;
   busy.add(type);
-  const packet = { id: crypto.randomUUID(), type, payload };
   let result;
   try {
+    const packet = { id: requestId(), type, payload };
     result = await sendPacket(packet);
     if (result.code === 'TIMEOUT' && socket.connected) result = await sendPacket(packet); // Same id: never apply twice.
     if (!result.ok) {
@@ -182,6 +197,15 @@ async function command(type, payload = {}, { quiet = false, restoring = false } 
       storage.write('kh-session', result.session);
     }
     return result;
+  } catch (error) {
+    console.error('Command failed:', type, error.name);
+    const failure = {
+      ok: false,
+      code: 'CLIENT_ERROR',
+      error: 'İşlem gönderilemedi. Sayfayı yenileyip tekrar dene veya HTTPS adresini kullan.',
+    };
+    if (!quiet) toast(failure.error);
+    return failure;
   } finally {
     busy.delete(type);
   }
@@ -274,11 +298,16 @@ $('entry-form').onsubmit = async (event) => {
   }
   $('entry-submit').disabled = true;
   $('entry-error').textContent = '';
-  const result = await command(state.mode, payload, { quiet: true });
-  if (!result?.ok)
-    $('entry-error').textContent =
-      result?.error || 'Sunucuya bağlanılıyor. Biraz sonra tekrar dene.';
-  $('entry-submit').disabled = false;
+  $('entry-submit').setAttribute('aria-busy', 'true');
+  try {
+    const result = await command(state.mode, payload, { quiet: true });
+    if (!result?.ok)
+      $('entry-error').textContent =
+        result?.error || 'Sunucuya bağlanılıyor. Biraz sonra tekrar dene.';
+  } finally {
+    $('entry-submit').disabled = false;
+    $('entry-submit').removeAttribute('aria-busy');
+  }
 };
 const invited = new URL(location.href).searchParams.get('room');
 if (invited) {
