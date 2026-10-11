@@ -482,3 +482,17 @@ test('a rejected challenge does not prevent judging the same word on a new turn'
   f.act(newOpponent.id, 'challenge', { cardId: g.currentId, turnId: g.turnId });
   assert.equal(f.room.status, 'challenge');
 });
+
+test('all fifteen portrait IDs and legacy sessions project safe avatar assets', () => {
+  const { AVATARS } = require('../src/game');
+  const store = new GameStore();
+  assert.equal(new Set(AVATARS).size, 15);
+  for (const avatar of AVATARS) {
+    const { room, player } = store.create({ nickname: 'Deniz', avatar });
+    assert.equal(store.view(room, player.id).players[0].avatar, avatar);
+  }
+  const { room, player } = store.create({ nickname: 'Ece', avatar: '../../outside' });
+  assert.equal(player.avatar, 'fox');
+  player.avatar = '🐨'; // A persisted session from the original emoji release.
+  assert.equal(store.view(room, player.id).players[0].avatar, 'koala');
+});

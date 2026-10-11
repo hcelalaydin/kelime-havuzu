@@ -55,6 +55,10 @@ Commit öncesi kontrol için `gitleaks` kurup `git config core.hooksPath .githoo
 
 ## Arayüz
 
+Yerel Manrope fontu, açık/koyu tema ve 15 özgün hayvan portresi. [Tasarım ve görsel üretim notları](docs/ART_DIRECTION.md).
+
+![Giriş ve karakter seçimi](docs/screenshots/home.png)
+
 ![Beş oyunculu fanus ve takım lobisi](docs/screenshots/lobby.png)
 
 ![Anlatıcı ekranı](docs/screenshots/game.png)

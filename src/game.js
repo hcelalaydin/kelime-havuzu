@@ -11,7 +11,27 @@ const PHASES = [
   { name: 'Sessiz Sinema', icon: '🎭', rule: 'Hiç konuşmadan, sadece jest ve mimiklerle anlat.' },
   { name: 'Ses ile Anlat', icon: '🎵', rule: 'Kelime kullanmadan, sadece sesler çıkararak anlat.' },
 ];
-const AVATARS = ['🦊', '🐻', '🐸', '🐱', '🐼', '🐨', '🦉', '🐙'];
+const AVATARS = [
+  'fox',
+  'bear',
+  'frog',
+  'cat',
+  'panda',
+  'koala',
+  'owl',
+  'octopus',
+  'rabbit',
+  'raccoon',
+  'capybara',
+  'penguin',
+  'tiger',
+  'sheep',
+  'dog',
+];
+const LEGACY_AVATARS = ['🦊', '🐻', '🐸', '🐱', '🐼', '🐨', '🦉', '🐙'];
+function normalizeAvatar(avatar) {
+  return AVATARS.includes(avatar) ? avatar : AVATARS[LEGACY_AVATARS.indexOf(avatar)] || AVATARS[0];
+}
 const LIMITS = {
   players: 32,
   rooms: 100,
@@ -84,7 +104,7 @@ class GameStore {
         tokenHash: hash(token),
         nickname: text(nickname, 2, 20, 'Takma ad'),
         team,
-        avatar: AVATARS.includes(avatar) ? avatar : AVATARS[0],
+        avatar: normalizeAvatar(avatar),
         connected: true,
         disconnectedAt: null,
         words: [],
@@ -636,7 +656,7 @@ class GameStore {
         id: q.id,
         nickname: q.nickname,
         team: q.team,
-        avatar: q.avatar,
+        avatar: normalizeAvatar(q.avatar),
         connected: q.connected,
         count: q.words.filter(Boolean).length,
         submitted: q.submitted,

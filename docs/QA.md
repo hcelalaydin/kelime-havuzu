@@ -17,7 +17,7 @@ Emüle edilmiş mobil tarayıcılar fiziksel telefon testinin yerini tam olarak 
 
 ## Son çalıştırma (11 Ekim 2026)
 
-- `npm run format:check`, `npm run lint`, `npm test`: başarılı; 34 test.
+- `npm run format:check`, `npm run lint`, `npm test`: başarılı; 35 test.
 - `npm run test:e2e`: 12/12 başarılı (masaüstü Chrome, mobil Chrome, mobil WebKit).
 - Son kayıt-hatası düzeltmesinden sonra beş oyunculu masaüstü tarayıcı akışı ayrıca yeniden geçti.
 - Node 24.21.0 üzerinde motor ve bağlantı testleri başarılı.
@@ -26,3 +26,7 @@ Emüle edilmiş mobil tarayıcılar fiziksel telefon testinin yerini tam olarak 
 - `docs/screenshots/` altındaki görüntüler gerçek tarayıcı testlerinden alınmıştır; örnek oyuncular kullanılır.
 
 - Son doğru kelimenin itiraz hakkı tur değişiminde de beş saniyeyi tamamlar. Yeni turda aynı kelime için yeni ihlal itirazı açılabilir; iki regresyon testi eklendi.
+
+## Arayüz yenilemesi
+
+15 portrenin tarayıcıda başarıyla yüklendiği ve seçim durumu doğrulanır. Eski emoji oturumu yeni portreye dönüştürülür; bilinmeyen veya dosya yolu biçimindeki karakter değerleri güvenli varsayılana düşer. Oyuncu işlem menüleri tıklama ve Escape ile kontrol edilir. Masaüstü ve mobil ekran görüntüleri son tasarımdan yenilendi; kullanıcı verisi yerine test oyuncuları kullanılır.

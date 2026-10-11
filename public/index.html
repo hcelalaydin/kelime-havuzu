@@ -3,15 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f6f4ed" />
+    <meta name="theme-color" content="#f5f6f7" />
     <meta
       name="description"
       content="Bir fanus, iki takım, dört farklı anlatım. Kelimelerini yaz; arkadaşlarınla Kelime Havuzu oyna."
     />
     <title>Kelime Havuzu | Bir fanus dolusu eğlence</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🫙%3C/text%3E%3C/svg%3E"
+      rel="preload"
+      href="/assets/fonts/manrope-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
     <link rel="stylesheet" href="/styles.css" />
     <script src="/socket.io/socket.io.js" defer></script>
@@ -21,7 +25,10 @@
     <a class="skip-link" href="#main">Oyuna geç</a>
     <header class="site-header">
       <a class="brand" href="/" aria-label="Kelime Havuzu ana sayfa"
-        ><span aria-hidden="true">🫙</span> kelime<span class="brand-light">havuzu</span></a
+        ><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span> kelime<span
+          class="brand-light"
+          >havuzu</span
+        ></a
       >
       <nav aria-label="Yardım ve görünüm">
         <button id="rules-button" class="quiet">Nasıl oynanır?</button>
@@ -47,23 +54,23 @@
     <main id="main" tabindex="-1">
       <section id="home-screen" class="screen home-screen">
         <div class="home-story">
-          <span class="eyebrow">AYNI KELİMELER. BAMBAŞKA HİKÂYELER.</span>
-          <h1>Bir fanus dolusu<br /><span class="accent">“Nasıl anlatsam?”</span></h1>
+          <h1>Az kelime.<br />Çok kahkaha.</h1>
           <p class="lead">
-            Kelimeleri katla, fanusa at.<br />Arkadaşlarını topla, anlatmaya başla.
+            Aynı kelimeleri dört farklı şekilde anlat.<br />Bazen tek bir bakış yeter. Bazen o da
+            yetmez.
           </p>
-          <div class="home-illustration" aria-hidden="true">
-            <span class="floating-note note-one">Sessizce anlat!</span>
-            <div class="jar hero-jar">
-              <div class="jar-rim"></div>
-              <div id="hero-papers" class="papers"></div>
-              <div class="jar-shine"></div>
-              <div class="jar-face">⌣</div>
+          <div class="character-scene" aria-hidden="true">
+            <div class="scene-card scene-back">
+              <img src="/assets/avatars/bear.webp" alt="" /><span>Tek kelime?</span>
             </div>
-            <span class="floating-note note-two">Sadece bir kelime.</span>
-            <span class="jar-shadow"></span>
+            <div class="scene-card scene-front">
+              <img src="/assets/avatars/fox.webp" alt="" /><span>Ben anlatırım.</span>
+            </div>
+            <img class="scene-peeker" src="/assets/avatars/frog.webp" alt="" />
           </div>
-          <p class="small home-caption">4–32 arkadaş · 2 takım · 4 aşama · Pas yok</p>
+          <p class="home-caption">
+            4–32 kişi <span></span> 2 takım <span></span> Herkes kendi ekranında
+          </p>
         </div>
         <div class="entry-card">
           <div class="tab-list" role="tablist" aria-label="Oyuna giriş">
@@ -75,7 +82,7 @@
             </button>
           </div>
           <form id="entry-form">
-            <h2 id="entry-title">Masa senin, davet senden.</h2>
+            <h2 id="entry-title">Arkadaşlarını topla.</h2>
             <p id="entry-subtitle" class="muted">Odanı aç, kodunu arkadaşlarınla paylaş.</p>
             <label for="nickname">Sana ne diyelim?</label>
             <input
@@ -88,7 +95,7 @@
               required
             />
             <fieldset class="avatar-field">
-              <legend>Masadaki karakterin</legend>
+              <legend>Karakterini seç</legend>
               <div id="avatars" class="avatar-picker"></div>
             </fieldset>
             <div id="join-fields" hidden>
@@ -112,10 +119,8 @@
               </fieldset>
             </div>
             <p id="entry-error" class="error-text" role="alert"></p>
-            <button id="entry-submit" class="primary wide" type="submit">
-              Fanusu masaya koy <span aria-hidden="true">↗</span>
-            </button>
-            <p class="small centered">Üyelik yok. Herkes kendi telefonundan katılsın.</p>
+            <button id="entry-submit" class="primary wide" type="submit">Oda oluştur</button>
+            <p class="small centered">Üyelik gerekmiyor. Oda koduyla katılın.</p>
           </form>
           <div id="restore-box" class="restore-box" hidden>
             <p>Masada yerin duruyor.</p>
@@ -124,16 +129,16 @@
           </div>
         </div>
         <div class="phase-preview" aria-label="Dört oyun aşaması">
-          <span>💬 Serbest anlat</span><span>☝️ Tek kelime</span><span>🎭 Sessiz sinema</span
-          ><span>🎵 Sadece ses</span>
+          <span><b>1</b> Serbest anlat</span><span><b>2</b> Tek kelime</span
+          ><span><b>3</b> Sessiz sinema</span><span><b>4</b> Sadece ses</span>
         </div>
       </section>
 
       <section id="lobby-screen" class="screen" hidden>
         <div class="room-heading">
           <div>
-            <span class="eyebrow">MASA HAZIRLANIYOR</span>
-            <h1>Kelimeler fanusa!</h1>
+            <span class="eyebrow">Oyun hazırlığı</span>
+            <h1>Herkesten birkaç kelime.</h1>
           </div>
           <div class="invite">
             <span class="small">Oda kodu</span><strong id="lobby-code"></strong
@@ -152,7 +157,6 @@
                 <div class="jar-rim"></div>
                 <div id="lobby-papers" class="papers"></div>
                 <div class="jar-shine"></div>
-                <div class="jar-face" aria-hidden="true">⌣</div>
               </div>
               <span class="jar-shadow"></span>
             </div>
@@ -232,7 +236,7 @@
         </div>
         <div class="start-panel">
           <p id="start-reason" role="status"></p>
-          <button id="start-game" class="primary admin-control">Herkes hazır, başlayalım ↗</button>
+          <button id="start-game" class="primary admin-control">Oyunu başlat</button>
         </div>
       </section>
 
@@ -293,7 +297,7 @@
         </div>
       </section>
     </main>
-    <footer><span>Birlikte oynayın. Güzel hatırlayın.</span><span>kelime havuzu</span></footer>
+    <footer><span>Kelimeler sizden. Gerisi masada.</span><span>kelime havuzu</span></footer>
     <div id="toast" class="toast" role="status" hidden></div>
     <dialog id="rules-dialog">
       <div class="dialog-heading">
@@ -308,19 +312,19 @@
       </p>
       <ol class="rules-list">
         <li>
-          <strong>💬 Kelime Anlat</strong>
+          <strong>Kelime Anlat</strong>
           <p>Kelimeyi ve içindeki sözcükleri kullanmadan serbest cümlelerle anlat.</p>
         </li>
         <li>
-          <strong>☝️ Tek Kelime</strong>
+          <strong>Tek Kelime</strong>
           <p>Yalnızca bir kelimelik ipucu söyle.</p>
         </li>
         <li>
-          <strong>🎭 Sessiz Sinema</strong>
+          <strong>Sessiz Sinema</strong>
           <p>Konuşmadan, yalnızca jest ve mimiklerle anlat.</p>
         </li>
         <li>
-          <strong>🎵 Ses ile Anlat</strong>
+          <strong>Ses ile Anlat</strong>
           <p>Kelime kullanmadan, yalnızca sesler çıkar.</p>
         </li>
       </ol>

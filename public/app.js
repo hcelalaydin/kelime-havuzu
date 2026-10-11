@@ -1,8 +1,52 @@
 'use strict';
 const $ = (id) => document.getElementById(id);
 const socket = io({ autoConnect: false, reconnectionDelay: 500, reconnectionDelayMax: 4000 });
-const avatars = ['🦊', '🐻', '🐸', '🐱', '🐼', '🐨', '🦉', '🐙'];
-const animalNames = ['Tilki', 'Ayı', 'Kurbağa', 'Kedi', 'Panda', 'Koala', 'Baykuş', 'Ahtapot'];
+const avatars = [
+  'fox',
+  'bear',
+  'frog',
+  'cat',
+  'panda',
+  'koala',
+  'owl',
+  'octopus',
+  'rabbit',
+  'raccoon',
+  'capybara',
+  'penguin',
+  'tiger',
+  'sheep',
+  'dog',
+];
+const animalNames = [
+  'Tilki',
+  'Ayı',
+  'Kurbağa',
+  'Kedi',
+  'Panda',
+  'Koala',
+  'Baykuş',
+  'Ahtapot',
+  'Tavşan',
+  'Rakun',
+  'Kapibara',
+  'Penguen',
+  'Kaplan',
+  'Koyun',
+  'Köpek',
+];
+function avatarImage(id, className = '') {
+  const legacy = ['🦊', '🐻', '🐸', '🐱', '🐼', '🐨', '🦉', '🐙'];
+  const normalized = avatars.includes(id) ? id : avatars[legacy.indexOf(id)] || 'fox';
+  const img = document.createElement('img');
+  img.src = `/assets/avatars/${normalized}.webp`;
+  img.alt = '';
+  img.className = className;
+  img.width = 96;
+  img.height = 96;
+  img.draggable = false;
+  return img;
+}
 const phaseNames = ['Kelime Anlat', 'Tek Kelime', 'Sessiz Sinema', 'Ses ile Anlat'];
 const state = {
   room: null,
@@ -173,11 +217,11 @@ function setMode(mode) {
   $('join-tab').setAttribute('aria-selected', String(join));
   $('join-fields').hidden = !join;
   $('room-code').required = join;
-  $('entry-title').textContent = join ? 'Masada sana da yer var.' : 'Masa senin, davet senden.';
+  $('entry-title').textContent = join ? 'Masaya katıl.' : 'Arkadaşlarını topla.';
   $('entry-subtitle').textContent = join
     ? 'Arkadaşının paylaştığı oda kodunu gir.'
     : 'Odanı aç, kodunu arkadaşlarınla paylaş.';
-  $('entry-submit').textContent = join ? 'Masaya katıl ↗' : 'Fanusu masaya koy ↗';
+  $('entry-submit').textContent = join ? 'Odaya katıl' : 'Oda oluştur';
   $('entry-error').textContent = '';
 }
 $('create-tab').onclick = () => setMode('create');
@@ -192,7 +236,9 @@ for (const tab of [$('create-tab'), $('join-tab')])
     }
   };
 avatars.forEach((avatar, i) => {
-  const button = node('button', '', avatar);
+  const button = node('button');
+  button.append(avatarImage(avatar));
+  button.title = animalNames[i];
   button.type = 'button';
   button.setAttribute('aria-label', animalNames[i]);
   button.setAttribute('aria-pressed', String(i === 0));
@@ -217,7 +263,7 @@ function papers(target, count, total) {
     target.append(paper);
   }
 }
-papers($('hero-papers'), 25, 35);
+
 $('entry-form').onsubmit = async (event) => {
   event.preventDefault();
   if (state.session && state.room) return;
@@ -353,7 +399,8 @@ function renderPlayers(target, players, room, game = false) {
   if (!players.length) target.append(node('li', 'empty-team', 'İlk takım arkadaşını bekliyor.'));
   for (const p of players) {
     const li = node('li', `player-row${p.connected ? '' : ' offline'}`);
-    const avatar = node('span', 'player-avatar', p.avatar);
+    const avatar = node('span', 'player-avatar');
+    avatar.append(avatarImage(p.avatar));
     avatar.setAttribute('aria-hidden', 'true');
     li.append(avatar);
     const detail = node('span', 'player-detail');
@@ -392,7 +439,7 @@ function renderPlayers(target, players, room, game = false) {
       };
       actions.append(kick);
       if (!game && p.connected) {
-        const transfer = node('button', 'quiet', '★');
+        const transfer = node('button', 'quiet', 'Yönetici yap');
         transfer.setAttribute('aria-label', `Yöneticiliği ${p.nickname} adlı oyuncuya ver`);
         transfer.onclick = async () => {
           if (
@@ -406,11 +453,38 @@ function renderPlayers(target, players, room, game = false) {
         };
         actions.prepend(transfer);
       }
-      li.append(actions);
+      const menu = node('details', 'player-menu');
+      const toggle = node('summary', '', '⋯');
+      toggle.setAttribute('aria-label', `${p.nickname} oyuncu işlemleri`);
+      toggle.setAttribute('role', 'button');
+      toggle.setAttribute('aria-expanded', 'false');
+      actions.id = `player-actions-${target.id}-${p.id}`;
+      toggle.setAttribute('aria-controls', actions.id);
+      menu.append(toggle, actions);
+      menu.ontoggle = () => {
+        toggle.setAttribute('aria-expanded', String(menu.open));
+        if (menu.open)
+          document.querySelectorAll('.player-menu[open]').forEach((other) => {
+            if (other !== menu) other.open = false;
+          });
+      };
+      li.append(menu);
     }
     target.append(li);
   }
 }
+document.addEventListener('click', (event) => {
+  document.querySelectorAll('.player-menu[open]').forEach((menu) => {
+    if (!menu.contains(event.target)) menu.open = false;
+  });
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape')
+    document.querySelectorAll('.player-menu[open]').forEach((menu) => {
+      menu.open = false;
+      menu.querySelector('summary').focus();
+    });
+});
 function renderLobby(room, previous) {
   state.playSignature = '';
   const myself = me(room);
@@ -630,7 +704,9 @@ $('reset-game').onclick = async () => {
 function message(character, title, description) {
   const box = node('div', 'stage-message');
   box.append(
-    node('div', 'character', character),
+    avatars.includes(character)
+      ? avatarImage(character, 'character portrait')
+      : node('div', 'character', character),
     node('h2', '', title),
     node('p', '', description),
   );
@@ -643,8 +719,8 @@ function renderGame(room) {
     narrator = room.players.find((p) => p.id === g.describerId);
   const describes = myself.id === g.describerId,
     opponent = myself.team !== g.team;
-  $('game-room').textContent = `ODA ${room.code}`;
-  $('phase-title').textContent = `${g.rule.icon} ${g.rule.name}`;
+  $('game-room').textContent = `Oda ${room.code}`;
+  $('phase-title').textContent = g.rule.name;
   $('score-red').textContent = g.scores.red;
   $('score-blue').textContent = g.scores.blue;
   if ($('phase-track').dataset.phase !== String(g.phase)) {
@@ -667,9 +743,23 @@ function renderGame(room) {
       ? 'Rakip takım · Hakem sensin'
       : 'Sen tahmin ediyorsun';
   $('remaining-count').textContent = `${g.remaining} / ${g.total} kelime kaldı`;
-  $('describer-label').textContent = narrator
-    ? `${narrator.avatar} ${narrator.nickname} · ${g.team === 'red' ? 'Kırmızı' : 'Mavi'} takım`
-    : 'Anlatıcı bekleniyor';
+  const identity = $('describer-label');
+  const identityKey = narrator ? `${narrator.id}:${narrator.avatar}:${g.team}` : '';
+  if (identity.dataset.player !== identityKey) {
+    identity.dataset.player = identityKey;
+    identity.replaceChildren(
+      ...(narrator
+        ? [
+            avatarImage(narrator.avatar),
+            node(
+              'span',
+              '',
+              `${narrator.nickname} · ${g.team === 'red' ? 'Kırmızı' : 'Mavi'} takım`,
+            ),
+          ]
+        : [node('span', '', 'Anlatıcı bekleniyor')]),
+    );
+  }
   $('timer').textContent = Math.ceil(g.timeMs / 1000);
   $('timer').classList.toggle('urgent', room.status === 'playing' && g.timeMs <= 10000);
   $('game-rule').textContent = g.rule.rule;
@@ -709,7 +799,7 @@ function renderGame(room) {
   target.replaceChildren();
   if (room.status === 'ready') {
     const box = message(
-      describes ? myself.avatar : '🫙',
+      narrator?.avatar || 'fox',
       describes ? 'Sahne senin!' : `${narrator?.nickname || 'Anlatıcı'} hazırlanıyor`,
       describes
         ? 'Takım arkadaşların hazır mı? Başlayınca kelimen ve süren açılır.'
@@ -717,19 +807,19 @@ function renderGame(room) {
     );
     if (describes)
       box.append(
-        actionButton('Hazırım, kelimeyi çek ↗', 'start-turn', { turnId: g.turnId }, 'primary wide'),
+        actionButton('Hazırım, kelimeyi çek', 'start-turn', { turnId: g.turnId }, 'primary wide'),
       );
     target.append(box);
   } else if (room.status === 'playing') {
     const card = node('div', `word-card${g.word ? '' : ' hidden-card'}`);
     if (g.word)
       card.append(
-        node('span', 'small', describes ? 'TAKIMINA ANLAT' : 'KELİMEYİ SESLİ SÖYLEME'),
+        node('span', 'small', describes ? 'Takımına anlat' : 'Kelimeyi sesli söyleme'),
         node('p', 'word', g.word.word),
       );
     else
       card.append(
-        node('span', 'character', '👂'),
+        avatarImage(myself.avatar, 'guessing-portrait'),
         node('h2', '', 'Kulaklar sende!'),
         node('p', 'small', 'Takım arkadaşını dinle, aklına geleni söyle.'),
       );
@@ -786,14 +876,14 @@ function renderGame(room) {
     } else box.append(node('p', 'small', 'Yönetici oyunu devam ettirecek.'));
     target.append(box);
   } else if (room.status === 'countdown') {
-    const box = message('🫙', 'Hazır mısınız?', 'Kalan süreyle devam ediyoruz.');
+    const box = message('owl', 'Hazır mısınız?', 'Kalan süreyle devam ediyoruz.');
     const count = node('div', 'countdown', g.countdown);
     count.id = 'countdown-number';
     box.append(count);
     target.append(box);
   } else if (room.status === 'challenge') {
     const box = message(
-      '✋',
+      '!',
       'Bir saniye, itiraz var.',
       `${g.challenge.by} anlatım kuralına itiraz etti. Süre durduruldu.`,
     );
@@ -816,7 +906,7 @@ function renderGame(room) {
     target.append(box);
   } else if (room.status === 'transition') {
     const box = message(
-      '🎉',
+      'frog',
       'Fanus boşaldı!',
       `Sıradaki: ${phaseNames[g.phase]}. Aynı kelimeler, yeni anlatım şekli.`,
     );
@@ -833,7 +923,7 @@ function renderGame(room) {
       box.append(wait);
     }
     if (admin) {
-      const b = actionButton('Sonraki aşamaya geç ↗', 'next-phase', {}, 'primary wide');
+      const b = actionButton('Sonraki aşamaya geç', 'next-phase', {}, 'primary wide');
       b.disabled = g.reviewMs > 0;
       box.append(b);
     } else box.append(node('p', 'small', 'Yönetici sonraki aşamayı başlatacak.'));
@@ -841,7 +931,7 @@ function renderGame(room) {
   } else if (room.status === 'finished') {
     const draw = g.scores.red === g.scores.blue;
     const box = message(
-      draw ? '🤝' : '🏆',
+      draw ? 'capybara' : 'tiger',
       draw
         ? 'Bu masada dostluk kazandı!'
         : `${g.scores.red > g.scores.blue ? 'Kırmızı' : 'Mavi'} takım kazandı!`,
@@ -876,7 +966,7 @@ function renderGame(room) {
     if (g.reviewMs > 0)
       box.append(node('p', 'small', 'Son kelimenin itiraz süresi bitince sonuç kesinleşir.'));
     if (admin) {
-      const button = node('button', 'primary wide', 'Yeni oyun, yeni kelimeler ↗');
+      const button = node('button', 'primary wide', 'Yeni oyun, yeni kelimeler');
       button.disabled = g.reviewMs > 0;
       button.onclick = () => command('return-lobby');
       box.append(button);
@@ -913,7 +1003,7 @@ function applyTheme(theme) {
   );
   $('theme-button').setAttribute('aria-pressed', String(theme === 'dark'));
   document.querySelector('meta[name=theme-color]').content =
-    theme === 'dark' ? '#182822' : '#f6f4ed';
+    theme === 'dark' ? '#20262c' : '#f5f6f7';
 }
 applyTheme(storage.read('kh-theme', 'light', true));
 $('theme-button').onclick = () => {

@@ -10,9 +10,17 @@
 - Kalıcı disk kaydı, sağlık kontrolü, hız sınırları, CSP, güvenli metin işleme, sabitlenmiş bağımlılıklar.
 - Docker, Compose, güncel Render Blueprint, GitHub CI ve Türkçe kılavuzlar.
 
+## Arayüz yenilemesi
+
+- Claude Code frontend-design, minimalist-ui ve redesign-existing-projects kaynaklarına dayanan sade gri/mürekkep paleti, yerel Manrope Variable fontu ve daha sakin yüzeyler.
+- Emoji seçicinin yerine 15 ayrı üretilmiş, şeffaf hayvan portresi; sabit dosya kimlikleri ve eski oturumlarla uyumluluk.
+- Giriş, lobi, anlatıcı/tahminci/hakem, duraklatma ve sonuç ekranlarında ortak tipografi/boşluk sistemi; mobilde sadeleşen düzen.
+- Yönetici işlemleri klavyeyle açılıp Escape ile kapanan oyuncu menülerinde. Anlatıcı portresi ve süre merkezi odağı oluşturur.
+- Portre promptları, tasarım kararları ve font lisansı docs/ART_DIRECTION.md ile public/assets altında.
+
 ## Kontroller
 
-- 34 motor/Socket.IO/kalıcılık testi geçti.
+- 35 motor/Socket.IO/kalıcılık testi geçti.
 - 12 Chromium masaüstü, Chromium mobil ve WebKit mobil senaryosu geçti.
 - Dört aşamalı gerçek tarayıcı oyunu: 4 kişi × 5 kelime × 4 aşama = 80 puan; bütün ekranlar yeni oyuna döndü.
 - Node 24 testleri geçti; Docker imajı derlendi. Gerçek container restart/kalıcı volume kontrolü oyuncuları, puanı, havuzu ve kalan süreyi korudu.

@@ -13,6 +13,8 @@ async function joinRoom(page, code, name, team) {
   await page.goto(`/?room=${code}`);
   await expect(page.locator('#connection')).toBeHidden();
   await page.getByLabel('Sana ne diyelim?').fill(name);
+  const character = { Ece: 'Kedi', Mert: 'Ayı', İpek: 'Tavşan', Can: 'Kurbağa' }[name] || 'Koala';
+  await page.getByRole('button', { name: character, exact: true }).click();
   await page.locator(`input[name=team][value=${team}]`).check();
   await page.locator('#entry-submit').click();
   await expect(page.locator('#lobby-screen')).toBeVisible();
@@ -47,6 +49,19 @@ async function access(page) {
 test('home, themes, rules, keyboard and form errors are accessible', async ({ page }, info) => {
   await page.goto('/');
   await expect(page.locator('#connection')).toBeHidden();
+  await expect(page.locator('#avatars button')).toHaveCount(15);
+  await expect
+    .poll(() =>
+      page
+        .locator('#avatars img')
+        .evaluateAll((images) => images.every((img) => img.complete && img.naturalWidth > 0)),
+    )
+    .toBe(true);
+  await page.getByRole('button', { name: 'Köpek', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Köpek', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await noOverflow(page);
   await access(page);
   await page.screenshot({ path: info.outputPath('home-light.png'), fullPage: true });
@@ -112,6 +127,11 @@ test('five people: role privacy, challenge, countdown, reconnect and reset throu
     for (let i = 0; i < 5; i++) await fillWords(pages[i], names[i]);
     await expect(pages[0].locator('#pool-count')).toHaveText('25');
     await expect(pages[0].locator('#start-game')).toBeEnabled();
+    const playerMenu = pages[0].getByRole('button', { name: 'Ece oyuncu işlemleri' });
+    await playerMenu.click();
+    await expect(pages[0].getByRole('button', { name: 'Ece adlı oyuncuyu çıkar' })).toBeVisible();
+    await playerMenu.press('Escape');
+    await expect(pages[0].getByRole('button', { name: 'Ece adlı oyuncuyu çıkar' })).toBeHidden();
     await pages[0].screenshot({ path: info.outputPath('five-player-lobby.png'), fullPage: true });
     await pages[0].locator('#start-game').click();
     for (const p of pages) await expect(p.locator('#game-screen')).toBeVisible();
