@@ -36,3 +36,35 @@ Bir ters vekil varsa `TRUST_PROXY_HOPS=1`; doğrudan erişimde `0`. Bu ayar yaln
 - Bu sürümde hesap/parola, merkezi skor tablosu, izleyici modu, oyun ortasında yeni katılım veya çok sunuculu ölçekleme yoktur.
 - Beklenmedik sunucu hataları loglanır; komut içeriği, kelimeler ve oturum anahtarları loglanmaz.
 - Gerçek dağıtım sağlayıcısında TLS, proxy ve disk smoke testi ayrıca yapılmalıdır; yerel tarayıcı testi bunları doğrulamaz.
+
+## Ubuntu + systemd kurulumu
+
+`ops/kelime-havuzu.service`, ayrı ve giriş yapamayan `kelime-havuzu` kullanıcısıyla çalışır. Node.js 24'ün resmi Linux arşivi SHA-256 doğrulamasıyla `/opt` altına kurulur; `/opt/kelime-havuzu/node` bu kurulumun bağlantısıdır. Sürümler `/opt/kelime-havuzu/releases/<commit>` altında tutulur; `current` çalıştırılan sürüme bağlanır. Kod ve bağımlılıklar root'a aittir, servis bunları değiştiremez.
+
+- Servis dosyası: `/etc/systemd/system/kelime-havuzu.service`
+- Ortam dosyası: `/etc/kelime-havuzu/environment` (root, 600; örnek `ops/environment.example`)
+- Kalıcı kayıt: `/var/lib/kelime-havuzu` (servis kullanıcısı, 700; snapshot 600)
+- Nginx başlangıç yapılandırması: `ops/nginx.conf`; sertifika kurulduktan sonra Certbot HTTPS yapılandırmasını ekler.
+- Nginx, istemcinin gönderdiği forwarded IP'yi kendi gördüğü adresle değiştirir. Uygulama `TRUST_PROXY_HOPS=1` kullanır. UFW'de 3000 açılmaz; sadece Nginx'in 80/443 portları kullanılır.
+
+İlk kurulumdan sonra:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now kelime-havuzu
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d kelimehavuzu.pqcrypt.xyz --non-interactive --agree-tos --redirect
+```
+
+Sertifika komutundan önce alan adının A kaydı sunucuya yönlenmiş olmalıdır. HTTPS açıldıktan sonra ortam dosyasındaki `APP_ORIGIN` yalnızca `https://kelimehavuzu.pqcrypt.xyz` olarak daraltılır ve servis yeniden başlatılır. Certbot'un yenileme zamanlayıcısını ve `certbot renew --dry-run` sonucunu kontrol edin.
+
+İşletim komutları:
+
+```sh
+sudo systemctl status kelime-havuzu
+sudo journalctl -u kelime-havuzu -n 100 --no-pager
+sudo systemctl restart kelime-havuzu
+curl -f https://kelimehavuzu.pqcrypt.xyz/healthz
+```
+
+Güncellemede yeni commit ayrı sürüm dizinine açılır ve `npm ci --omit=dev --ignore-scripts` çalıştırılır. `current` bağlantısı atomik olarak yeni sürüme çevrilir, servis yeniden başlatılır ve sağlık kontrolü yapılır. Sorun varsa önceki sürüme geri dönülür; kalıcı kayıt dizinine dokunulmaz. Yedekleri web kökü dışında, yalnızca yönetici erişebilecek izinlerle tutun.
