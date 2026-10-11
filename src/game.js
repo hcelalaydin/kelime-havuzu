@@ -236,7 +236,7 @@ class GameStore {
     if (g.pool.length > 1 && g.pool[0] === oldCardId)
       [g.pool[0], g.pool[1]] = [g.pool[1], g.pool[0]];
     g.currentId = null;
-    g.lastResult = null;
+    g.reviewedCards = [];
     g.turnId = id();
     g.remainingMs = room.settings.turnDuration * 1000;
     g.deadline = null;
@@ -276,6 +276,7 @@ class GameStore {
       team: g.team,
       phase: g.phase,
       turnId: g.turnId,
+      describerId: g.describerId,
       reviewed: !valid || g.reviewedCards.includes(cardId),
     };
     if (!g.pool.length) this.finishPhase(room);
@@ -446,21 +447,23 @@ class GameStore {
       }
       case 'challenge': {
         requireThat(
-          g && ['playing', 'transition', 'finished'].includes(room.status),
+          g &&
+            ['ready', 'playing', 'paused', 'countdown', 'transition', 'finished'].includes(
+              room.status,
+            ),
           'Şu an itiraz edilemez.',
         );
-        requireThat(p.team !== g.team, 'İtirazı karşı takım yapabilir.', 'FORBIDDEN');
-        requireThat(data.turnId === g.turnId, 'Tur değişti.', 'STALE');
         const last = g.lastResult;
         const isLast =
           last &&
           last.cardId === data.cardId &&
           last.valid &&
           !last.reviewed &&
-          last.turnId === g.turnId &&
+          last.turnId === data.turnId &&
           this.now() - last.at <= LIMITS.reviewMs;
         const isCurrent =
           room.status === 'playing' &&
+          data.turnId === g.turnId &&
           data.cardId === g.currentId &&
           !g.reviewedCards.includes(data.cardId);
         requireThat(
@@ -468,11 +471,16 @@ class GameStore {
           'Bu kelime için itiraz süresi bitti veya karar verildi.',
           'STALE',
         );
+        requireThat(
+          p.team !== (isLast ? last.team : g.team),
+          'İtirazı karşı takım yapabilir.',
+          'FORBIDDEN',
+        );
         this.freeze(room);
         g.challenge = {
           cardId: data.cardId,
           by: p.nickname,
-          team: g.team,
+          team: isLast ? last.team : g.team,
           target: isLast ? 'last' : 'current',
         };
         room.status = 'challenge';
@@ -613,6 +621,7 @@ class GameStore {
       return c ? { ...c } : null;
     };
     const last = g?.lastResult;
+    const lastVisible = last && (p.id === last.describerId || p.team !== last.team);
     return {
       code: room.code,
       version: room.version,
@@ -651,11 +660,12 @@ class GameStore {
             invalid: [...g.invalid],
             word: visible && g.currentId ? card(g.currentId) : null,
             lastWord:
-              visible && last && this.now() - last.at <= LIMITS.reviewMs
+              lastVisible && last && this.now() - last.at <= LIMITS.reviewMs
                 ? {
                     ...card(last.cardId),
                     valid: last.valid,
-                    reviewable: last.valid && !last.reviewed,
+                    reviewable: last.valid && !last.reviewed && p.team !== last.team,
+                    turnId: last.turnId,
                   }
                 : null,
             reviewMs:
@@ -668,7 +678,12 @@ class GameStore {
               room.status === 'playing' &&
               !g.reviewedCards.includes(g.currentId),
             challenge: g.challenge
-              ? { by: g.challenge.by, word: visible ? card(g.challenge.cardId)?.word : null }
+              ? {
+                  by: g.challenge.by,
+                  word: (g.challenge.target === 'last' ? lastVisible : visible)
+                    ? card(g.challenge.cardId)?.word
+                    : null,
+                }
               : null,
           }
         : null,

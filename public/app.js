@@ -884,9 +884,8 @@ function renderGame(room) {
     target.append(box);
   }
   if (
-    opponent &&
     g.lastWord?.reviewable &&
-    ['playing', 'transition', 'finished'].includes(room.status)
+    ['ready', 'playing', 'paused', 'countdown', 'transition', 'finished'].includes(room.status)
   ) {
     const row = node('div', 'review-row');
     row.append(
@@ -894,7 +893,7 @@ function renderGame(room) {
       actionButton(
         'Son doğruya itiraz',
         'challenge',
-        { cardId: g.lastWord.id, turnId: g.turnId },
+        { cardId: g.lastWord.id, turnId: g.lastWord.turnId },
         'secondary',
       ),
     );

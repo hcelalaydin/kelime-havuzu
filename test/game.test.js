@@ -441,3 +441,44 @@ test('mixed actions retain deadline and score/pool invariants', () => {
     }
   }
 });
+test('last correct review survives a turn boundary and deducts from the original team', () => {
+  const f = fixture();
+  f.start();
+  f.draw();
+  f.advance(59900);
+  const g = f.room.game;
+  const scoredTeam = g.team;
+  const opponent = f.room.players.find((p) => p.team !== scoredTeam);
+  const guesser = f.room.players.find((p) => p.team === scoredTeam && p.id !== g.describerId);
+  f.correct();
+  const last = { cardId: g.lastResult.cardId, turnId: g.turnId };
+  f.advance(100);
+  assert.equal(f.room.status, 'ready');
+  assert.notEqual(g.team, scoredTeam);
+  assert(f.store.view(f.room, opponent.id).game.lastWord.reviewable);
+  assert.equal(f.store.view(f.room, guesser.id).game.lastWord, null);
+  f.act(opponent.id, 'challenge', last);
+  f.act(f.room.adminId, 'resolve-challenge', { invalid: true });
+  assert.equal(g.scores[scoredTeam], 0);
+  assert.equal(g.invalid[0], 1);
+  assert.equal(g.pool.length, 19);
+  f.act(f.room.adminId, 'resume-game');
+  assert.equal(f.room.status, 'ready');
+});
+test('a rejected challenge does not prevent judging the same word on a new turn', () => {
+  const f = fixture();
+  f.start();
+  f.draw();
+  const g = f.room.game;
+  while (g.pool.length > 1) f.correct();
+  const opponent = f.room.players.find((p) => p.team !== g.team);
+  f.act(opponent.id, 'challenge', { cardId: g.currentId, turnId: g.turnId });
+  f.act(f.room.adminId, 'resolve-challenge', { invalid: false });
+  f.act(f.room.adminId, 'resume-game');
+  f.advance(3000);
+  f.advance(60000);
+  f.draw();
+  const newOpponent = f.room.players.find((p) => p.team !== g.team);
+  f.act(newOpponent.id, 'challenge', { cardId: g.currentId, turnId: g.turnId });
+  assert.equal(f.room.status, 'challenge');
+});

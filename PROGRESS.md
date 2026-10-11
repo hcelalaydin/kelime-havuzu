@@ -12,7 +12,7 @@
 
 ## Kontroller
 
-- 32 motor/Socket.IO/kalıcılık testi geçti.
+- 34 motor/Socket.IO/kalıcılık testi geçti.
 - 12 Chromium masaüstü, Chromium mobil ve WebKit mobil senaryosu geçti.
 - Dört aşamalı gerçek tarayıcı oyunu: 4 kişi × 5 kelime × 4 aşama = 80 puan; bütün ekranlar yeni oyuna döndü.
 - Node 24 testleri geçti; Docker imajı derlendi. Gerçek container restart/kalıcı volume kontrolü oyuncuları, puanı, havuzu ve kalan süreyi korudu.

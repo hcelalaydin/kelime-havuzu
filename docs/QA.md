@@ -17,10 +17,12 @@ Emüle edilmiş mobil tarayıcılar fiziksel telefon testinin yerini tam olarak 
 
 ## Son çalıştırma (11 Ekim 2026)
 
-- `npm run format:check`, `npm run lint`, `npm test`: başarılı; 32 test.
+- `npm run format:check`, `npm run lint`, `npm test`: başarılı; 34 test.
 - `npm run test:e2e`: 12/12 başarılı (masaüstü Chrome, mobil Chrome, mobil WebKit).
 - Son kayıt-hatası düzeltmesinden sonra beş oyunculu masaüstü tarayıcı akışı ayrıca yeniden geçti.
 - Node 24.21.0 üzerinde motor ve bağlantı testleri başarılı.
 - `npm audit --omit=dev`: 0 bilinen açık.
 - `docker build`, `docker compose config --quiet` ve `npm run test:docker`: başarılı. Gerçek container restart ve kalıcı volume testi oyuncu kimliklerini, 1 puanı, kalan 19 kelimeyi ve süreyi korudu.
 - `docs/screenshots/` altındaki görüntüler gerçek tarayıcı testlerinden alınmıştır; örnek oyuncular kullanılır.
+
+- Son doğru kelimenin itiraz hakkı tur değişiminde de beş saniyeyi tamamlar. Yeni turda aynı kelime için yeni ihlal itirazı açılabilir; iki regresyon testi eklendi.
