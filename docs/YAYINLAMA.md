@@ -68,3 +68,9 @@ curl -f https://kelimehavuzu.pqcrypt.xyz/healthz
 ```
 
 Güncellemede yeni commit ayrı sürüm dizinine açılır ve `npm ci --omit=dev --ignore-scripts` çalıştırılır. `current` bağlantısı atomik olarak yeni sürüme çevrilir, servis yeniden başlatılır ve sağlık kontrolü yapılır. Sorun varsa önceki sürüme geri dönülür; kalıcı kayıt dizinine dokunulmaz. Yedekleri web kökü dışında, yalnızca yönetici erişebilecek izinlerle tutun.
+
+### Doğrulanan canlı kurulum — 11 Ekim 2026
+
+Adres: **https://kelimehavuzu.pqcrypt.xyz**. Sunucuda Node.js **24.21.0**, Nginx ve `kelime-havuzu.service` kullanılıyor. Uygulama sürümü `f2f4f6d`; sonrasındaki işletim dosyası değişiklikleri oyun kodunu değiştirmez. Servis açılışta etkin, kayıt izinleri 700/600, yalnızca HTTPS alan adı Origin olarak kabul ediliyor.
+
+Canlı doğrulama: sağlık kontrolü, tarayıcı açılışı ve bütün portrelerin yüklenmesi, dört oyuncuyla bağlantı ve kelime görünürlüğü, Nginx üzerinden WebSocket ve polling, kontrollü systemd restart sonrasında aynı oturumların 20 kelimelik havuza ve duraklatılmış oyuna dönüşü. TLS sertifikası doğrulandı; HTTP, HTTPS'e yönleniyor. `certbot.timer` etkin ve bu alan adı için `certbot renew --dry-run` başarılı. Sunucunun tamamı yeniden başlatılmadı; otomatik açılış systemd enablement üzerinden doğrulandı.
