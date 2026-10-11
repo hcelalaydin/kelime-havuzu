@@ -1,833 +1,1068 @@
-/* ═══════════════════════════════════════════════
-   Kelime Havuzu — Frontend Uygulama
-   Socket.IO ile gerçek zamanlı iletişim
-   ═══════════════════════════════════════════════ */
-
-// ─── Socket.IO bağlantısı ───
-const socket = io();
-
-// ─── Durum yönetimi ───
+'use strict';
+const $ = (id) => document.getElementById(id);
+const socket = io({
+  autoConnect: false,
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 4000,
+  tryAllTransports: true,
+});
+// getRandomValues also works on HTTP IP addresses, unlike randomUUID.
+function requestId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+const avatars = [
+  'fox',
+  'bear',
+  'frog',
+  'cat',
+  'panda',
+  'koala',
+  'owl',
+  'octopus',
+  'rabbit',
+  'raccoon',
+  'capybara',
+  'penguin',
+  'tiger',
+  'sheep',
+  'dog',
+];
+const animalNames = [
+  'Tilki',
+  'Ayı',
+  'Kurbağa',
+  'Kedi',
+  'Panda',
+  'Koala',
+  'Baykuş',
+  'Ahtapot',
+  'Tavşan',
+  'Rakun',
+  'Kapibara',
+  'Penguen',
+  'Kaplan',
+  'Koyun',
+  'Köpek',
+];
+function avatarImage(id, className = '') {
+  const legacy = ['🦊', '🐻', '🐸', '🐱', '🐼', '🐨', '🦉', '🐙'];
+  const normalized = avatars.includes(id) ? id : avatars[legacy.indexOf(id)] || 'fox';
+  const img = document.createElement('img');
+  img.src = `/assets/avatars/${normalized}.webp`;
+  img.alt = '';
+  img.className = className;
+  img.width = 96;
+  img.height = 96;
+  img.draggable = false;
+  return img;
+}
+const phaseNames = ['Kelime Anlat', 'Tek Kelime', 'Sessiz Sinema', 'Ses ile Anlat'];
 const state = {
-  mySocketId: null,
-  roomCode: null,
-  nickname: null,
-  team: null,
-  isAdmin: false,
-  currentScreen: 'home-screen',
-  roomState: null,
-  currentWord: null,
-  isMuted: localStorage.getItem('muted') === 'true',
-  selectedJoinTeam: 'red'
+  room: null,
+  mode: 'create',
+  avatar: avatars[0],
+  session: null,
+  restoring: false,
+  replaced: false,
+  draftKey: null,
+  draft: [],
+  dirty: false,
+  editNumber: 0,
+  playSignature: '',
+  sound: false,
 };
-
-// ─── Ses sistemi (Web Audio API) ───
-let audioCtx = null;
-
-function getAudioContext() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  // Askıya alınmış AudioContext'i devam ettir (mobil cihazlar için gerekli)
-  if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
-  }
-  return audioCtx;
-}
-
-const SoundEffects = {
-  // Kısa "ding" sesi — doğru tahmin
-  ding() {
-    if (state.isMuted) return;
-    const ctx = getAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
+const storage = {
+  read(key, fallback, persistent = false) {
+    try {
+      const raw = (persistent ? localStorage : sessionStorage).getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
   },
-
-  // Buzzer sesi — süre doldu
-  buzzer() {
-    if (state.isMuted) return;
-    const ctx = getAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(200, ctx.currentTime);
-    osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.5);
-    gain.gain.setValueAtTime(0.25, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.5);
+  write(key, value, persistent = false) {
+    try {
+      (persistent ? localStorage : sessionStorage).setItem(key, JSON.stringify(value));
+      return true;
+    } catch {
+      toast('Tarayıcı kaydı kapalı. Sayfayı kapatırsan otomatik geri dönüş çalışmayabilir.');
+      return false;
+    }
   },
-
-  // Tick sesi — son 10 saniye
-  tick() {
-    if (state.isMuted) return;
-    const ctx = getAudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1000, ctx.currentTime);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.08);
+  remove(key) {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      /* Storage may be disabled; server session still expires. */
+    }
   },
-
-  // Kısa jingle — faz geçişi
-  jingle() {
-    if (state.isMuted) return;
-    const ctx = getAudioContext();
-    const notes = [523, 659, 784, 1047];
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12);
-      gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.12 + 0.25);
-      osc.start(ctx.currentTime + i * 0.12);
-      osc.stop(ctx.currentTime + i * 0.12 + 0.25);
-    });
-  },
-
-  // Kutlama sesi — oyun sonu
-  celebration() {
-    if (state.isMuted) return;
-    const ctx = getAudioContext();
-    const notes = [523, 659, 784, 1047, 784, 1047, 1319];
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.15);
-      gain.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.15);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.15 + 0.3);
-      osc.start(ctx.currentTime + i * 0.15);
-      osc.stop(ctx.currentTime + i * 0.15 + 0.3);
-    });
-  }
 };
-
-// ─── Ekran yönetimi ───
-function showScreen(screenId) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  const screen = document.getElementById(screenId);
-  if (screen) {
-    screen.classList.add('active');
-    state.currentScreen = screenId;
+state.session = storage.read('kh-session', null);
+state.sound = storage.read('kh-sound', false, true);
+let draftTimer, toastTimer, audioContext, draftFlight;
+const busy = new Set();
+function node(tag, className, content) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (content !== undefined) el.textContent = content;
+  return el;
+}
+function toast(message) {
+  $('toast').textContent = message;
+  $('toast').hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    $('toast').hidden = true;
+  }, 5500);
+}
+function showScreen(name) {
+  for (const id of ['home-screen', 'lobby-screen', 'game-screen']) $(id).hidden = id !== name;
+}
+function actionButton(label, type, payload = {}, className = 'primary') {
+  const b = node('button', className, label);
+  b.type = 'button';
+  b.addEventListener('click', async () => {
+    b.disabled = true;
+    await command(type, payload);
+    if (b.isConnected) b.disabled = false;
+  });
+  return b;
+}
+function setConnection(message) {
+  $('connection').replaceChildren(document.createTextNode(message));
+  $('connection').hidden = !message;
+  document.body.classList.toggle('connection-blocked', !!message);
+}
+function sound(kind = 'point') {
+  if (!state.sound) return;
+  try {
+    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+    audioContext.resume().catch(() => {
+      /* Browser requires a gesture before sound. */
+    });
+    const osc = audioContext.createOscillator(),
+      gain = audioContext.createGain();
+    osc.connect(gain);
+    gain.connect(audioContext.destination);
+    osc.frequency.value = kind === 'point' ? 740 : kind === 'turn' ? 250 : 520;
+    gain.gain.setValueAtTime(0.09, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+    osc.start();
+    osc.stop(audioContext.currentTime + 0.21);
+  } catch {
+    toast('Bu tarayıcıda oyun sesi açılamadı.');
+    state.sound = false;
   }
 }
-
-// ─── Bildirim (toast) ───
-function showToast(message, duration = 3000) {
-  const toast = document.getElementById('toast');
-  toast.textContent = message;
-  toast.style.display = 'block';
-  clearTimeout(toast._timeout);
-  toast._timeout = setTimeout(() => {
-    toast.style.display = 'none';
-  }, duration);
+async function sendPacket(packet) {
+  return new Promise((resolve) =>
+    socket.timeout(4500).emit('command', packet, (error, response) =>
+      resolve(
+        error
+          ? {
+              ok: false,
+              code: 'TIMEOUT',
+              error: 'Yanıt gecikti. Bağlantını kontrol et; işlem durumu eşitleniyor.',
+            }
+          : response,
+      ),
+    ),
+  );
 }
-
-// ─── Yardımcı fonksiyonlar ───
-function getPhaseInfo(phase) {
-  const phases = {
-    1: { name: 'Kelime Anlat', icon: '🗣️' },
-    2: { name: 'Tek Kelime', icon: '☝️' },
-    3: { name: 'Sessiz Sinema', icon: '🤫' },
-    4: { name: 'Ses ile Anlat', icon: '🔊' }
+async function command(type, payload = {}, { quiet = false, restoring = false } = {}) {
+  if (!socket.connected || state.replaced || (state.restoring && !restoring)) {
+    if (!quiet) toast('Bağlantı kurulunca tekrar dene.');
+    return null;
+  }
+  if (busy.has(type)) return null;
+  busy.add(type);
+  let result;
+  try {
+    const packet = { id: requestId(), type, payload };
+    result = await sendPacket(packet);
+    if (result.code === 'TIMEOUT' && socket.connected) result = await sendPacket(packet); // Same id: never apply twice.
+    if (!result.ok) {
+      if (!quiet) toast(result.error);
+      return result;
+    }
+    if (result.warning) toast(result.warning);
+    if (result.session) {
+      state.session = result.session;
+      storage.write('kh-session', result.session);
+    }
+    return result;
+  } catch (error) {
+    console.error('Command failed:', type, error.name);
+    const failure = {
+      ok: false,
+      code: 'CLIENT_ERROR',
+      error: 'İşlem gönderilemedi. Sayfayı yenileyip tekrar dene veya HTTPS adresini kullan.',
+    };
+    if (!quiet) toast(failure.error);
+    return failure;
+  } finally {
+    busy.delete(type);
+  }
+}
+function ask(title, message, action = 'Onayla') {
+  $('confirm-title').textContent = title;
+  $('confirm-message').textContent = message;
+  $('confirm-ok').textContent = action;
+  const dialog = $('confirm-dialog');
+  dialog.showModal();
+  return new Promise((resolve) => {
+    const finish = (result) => {
+      dialog.close();
+      $('confirm-ok').onclick = null;
+      $('confirm-cancel').onclick = null;
+      dialog.removeEventListener('cancel', cancel);
+      resolve(result);
+    };
+    const cancel = (event) => {
+      event.preventDefault();
+      finish(false);
+    };
+    $('confirm-ok').onclick = () => finish(true);
+    $('confirm-cancel').onclick = () => finish(false);
+    dialog.addEventListener('cancel', cancel);
+    $('confirm-cancel').focus();
+  });
+}
+function setMode(mode) {
+  state.mode = mode;
+  const join = mode === 'join';
+  $('create-tab').setAttribute('aria-selected', String(!join));
+  $('join-tab').setAttribute('aria-selected', String(join));
+  $('join-fields').hidden = !join;
+  $('room-code').required = join;
+  $('entry-title').textContent = join ? 'Masaya katıl.' : 'Arkadaşlarını topla.';
+  $('entry-subtitle').textContent = join
+    ? 'Arkadaşının paylaştığı oda kodunu gir.'
+    : 'Odanı aç, kodunu arkadaşlarınla paylaş.';
+  $('entry-submit').textContent = join ? 'Odaya katıl' : 'Oda oluştur';
+  $('entry-error').textContent = '';
+}
+$('create-tab').onclick = () => setMode('create');
+$('join-tab').onclick = () => setMode('join');
+for (const tab of [$('create-tab'), $('join-tab')])
+  tab.onkeydown = (event) => {
+    if (['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      event.preventDefault();
+      const next = tab.id === 'create-tab' ? $('join-tab') : $('create-tab');
+      next.click();
+      next.focus();
+    }
   };
-  return phases[phase] || phases[1];
+avatars.forEach((avatar, i) => {
+  const button = node('button');
+  button.append(avatarImage(avatar));
+  button.title = animalNames[i];
+  button.type = 'button';
+  button.setAttribute('aria-label', animalNames[i]);
+  button.setAttribute('aria-pressed', String(i === 0));
+  button.onclick = () => {
+    state.avatar = avatar;
+    [...$('avatars').children].forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+  };
+  $('avatars').append(button);
+});
+function papers(target, count, total) {
+  const shown = count === 0 ? 0 : Math.max(1, Math.round(Math.min(1, count / total) * 38));
+  if (target.childElementCount === shown) return;
+  while (target.childElementCount > shown) target.lastElementChild.remove();
+  const colors = ['#eec97e', '#e8a99d', '#9ebbb2', '#b8cce2', '#d7b8d7', '#e4d9ac'];
+  while (target.childElementCount < shown) {
+    const i = target.childElementCount;
+    const paper = node('span', 'paper');
+    paper.style.left = `${7 + ((i * 31) % 68)}%`;
+    paper.style.bottom = `${4 + Math.floor(i / 5) * 7}%`;
+    paper.style.setProperty('--rotation', `${((i * 37) % 68) - 34}deg`);
+    paper.style.setProperty('--paper-color', colors[i % colors.length]);
+    target.append(paper);
+  }
 }
 
-// ═══════════════════════════════════════════
-// ANA EKRAN — Olay dinleyicileri
-// ═══════════════════════════════════════════
-
-// Oda Oluştur
-document.getElementById('btn-create').addEventListener('click', () => {
-  const nickname = document.getElementById('create-nickname').value.trim();
-  if (!nickname || nickname.length < 2 || nickname.length > 20) {
-    showToast('Takma ad 2-20 karakter olmalıdır.');
-    return;
+$('entry-form').onsubmit = async (event) => {
+  event.preventDefault();
+  if (state.session && state.room) return;
+  const payload = { nickname: $('nickname').value.trim(), avatar: state.avatar };
+  if (state.mode === 'join') {
+    payload.roomCode = $('room-code').value.trim().toUpperCase();
+    payload.team = document.querySelector('input[name=team]:checked').value;
   }
-  state.nickname = nickname;
-  socket.emit('create-room', { nickname });
-});
-
-// Takım seçimi (katılma formundaki)
-document.getElementById('join-team-red').addEventListener('click', () => {
-  state.selectedJoinTeam = 'red';
-  document.getElementById('join-team-red').classList.add('active');
-  document.getElementById('join-team-blue').classList.remove('active');
-});
-
-document.getElementById('join-team-blue').addEventListener('click', () => {
-  state.selectedJoinTeam = 'blue';
-  document.getElementById('join-team-blue').classList.add('active');
-  document.getElementById('join-team-red').classList.remove('active');
-});
-
-// Odaya Katıl
-document.getElementById('btn-join').addEventListener('click', () => {
-  const code = document.getElementById('join-code').value.trim().toUpperCase();
-  const nickname = document.getElementById('join-nickname').value.trim();
-
-  if (!code || code.length !== 6) {
-    showToast('6 haneli oda kodunu gir.');
-    return;
+  $('entry-submit').disabled = true;
+  $('entry-error').textContent = '';
+  $('entry-submit').setAttribute('aria-busy', 'true');
+  try {
+    const result = await command(state.mode, payload, { quiet: true });
+    if (!result?.ok)
+      $('entry-error').textContent =
+        result?.error || 'Sunucuya bağlanılıyor. Biraz sonra tekrar dene.';
+  } finally {
+    $('entry-submit').disabled = false;
+    $('entry-submit').removeAttribute('aria-busy');
   }
-  if (!nickname || nickname.length < 2 || nickname.length > 20) {
-    showToast('Takma ad 2-20 karakter olmalıdır.');
-    return;
-  }
-
-  state.nickname = nickname;
-  state.roomCode = code;
-  socket.emit('join-room', { roomCode: code, nickname, team: state.selectedJoinTeam });
-});
-
-// Kurallar modal
-document.getElementById('btn-rules').addEventListener('click', () => {
-  document.getElementById('rules-modal').style.display = 'flex';
-});
-
-document.getElementById('btn-close-rules').addEventListener('click', () => {
-  document.getElementById('rules-modal').style.display = 'none';
-});
-
-// Son oyuna dön
-document.getElementById('btn-rejoin').addEventListener('click', () => {
-  const lastRoom = localStorage.getItem('lastRoomCode');
-  const lastNick = localStorage.getItem('lastNickname');
-  if (lastRoom && lastNick) {
-    state.nickname = lastNick;
-    state.roomCode = lastRoom;
-    socket.emit('join-room', { roomCode: lastRoom, nickname: lastNick, team: 'red' });
-  }
-});
-
-// Son oyun kontrolü
-const lastRoom = localStorage.getItem('lastRoomCode');
-const lastNick = localStorage.getItem('lastNickname');
-if (lastRoom && lastNick) {
-  document.getElementById('rejoin-section').style.display = 'block';
+};
+const invited = new URL(location.href).searchParams.get('room');
+if (invited) {
+  setMode('join');
+  $('room-code').value = invited.slice(0, 6).toUpperCase();
 }
-
-// ═══════════════════════════════════════════
-// LOBİ EKRANI — Olay dinleyicileri
-// ═══════════════════════════════════════════
-
-// Oda kodunu kopyala
-document.getElementById('btn-copy-code').addEventListener('click', () => {
-  const code = document.getElementById('lobby-room-code').textContent;
-  navigator.clipboard.writeText(code).then(() => {
-    showToast('Oda kodu kopyalandı!');
-  }).catch(() => {
-    showToast('Kopyalama başarısız.');
-  });
-});
-
-// Takım değiştir
-document.getElementById('btn-switch-team').addEventListener('click', () => {
-  socket.emit('switch-team');
-});
-
-// Kelime yaz ekranına git
-document.getElementById('btn-write-words').addEventListener('click', () => {
-  if (!state.roomState) return;
-
-  // Kelimeleri zaten gönderdi mi kontrol et
-  const me = findMyself();
-  if (me && me.wordsSubmitted) {
-    showToast('Kelimelerin zaten gönderildi.');
-    return;
-  }
-
-  const count = state.roomState.settings.wordsPerPlayer;
-  document.getElementById('word-entry-info').textContent = `${count} kelime yazman gerekiyor`;
-
-  // Input alanlarını oluştur
-  const container = document.getElementById('word-inputs');
-  container.innerHTML = '';
-  for (let i = 0; i < count; i++) {
-    const row = document.createElement('div');
-    row.className = 'word-input-row';
-    row.innerHTML = `
-      <span class="word-number">${i + 1}.</span>
-      <input type="text" class="input word-input" maxlength="40" placeholder="Kelime ${i + 1}" autocomplete="off">
-    `;
-    container.appendChild(row);
-  }
-
-  // Otomatik odaklanma (focus)
-  const inputs = container.querySelectorAll('.word-input');
-  inputs.forEach((input, idx) => {
-    input.addEventListener('input', () => {
-      checkWordInputs();
-      // Doluysa sonraki input'a geç
-      if (input.value.trim() && idx < inputs.length - 1) {
-        // Enter tuşuyla geçişi de kontrol et (aşağıda)
-      }
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && idx < inputs.length - 1) {
-        e.preventDefault();
-        inputs[idx + 1].focus();
-      }
-      if (e.key === 'Enter' && idx === inputs.length - 1) {
-        e.preventDefault();
-        const btn = document.getElementById('btn-submit-words');
-        if (!btn.disabled) btn.click();
-      }
-    });
-  });
-
-  // İlk input'a odaklan
-  if (inputs.length > 0) inputs[0].focus();
-
-  showScreen('word-entry-screen');
-});
-
-// Kelime girişlerini kontrol et
-function checkWordInputs() {
-  const inputs = document.querySelectorAll('.word-input');
-  const allFilled = Array.from(inputs).every(i => i.value.trim().length > 0);
-  document.getElementById('btn-submit-words').disabled = !allFilled;
+function clearSession() {
+  clearTimeout(draftTimer);
+  storage.remove('kh-session');
+  if (state.draftKey) storage.remove(state.draftKey);
+  state.session = null;
+  state.room = null;
+  state.draftKey = null;
+  state.dirty = false;
+  state.playSignature = '';
+  $('restore-box').hidden = true;
+  showScreen('home-screen');
 }
-
-// Kelimeleri gönder
-document.getElementById('btn-submit-words').addEventListener('click', () => {
-  const inputs = document.querySelectorAll('.word-input');
-  const words = Array.from(inputs).map(i => i.value.trim());
-
-  const allValid = words.every(w => w.length >= 1 && w.length <= 40);
-  if (!allValid) {
-    showToast('Her kelime 1-40 karakter olmalıdır.');
-    return;
-  }
-
-  socket.emit('submit-words', { words });
-  showScreen('lobby-screen');
-});
-
-// Lobiye dön
-document.getElementById('btn-back-lobby').addEventListener('click', () => {
-  showScreen('lobby-screen');
-});
-
-// Ayarlar değişiklikleri (admin)
-document.getElementById('setting-words').addEventListener('change', (e) => {
-  socket.emit('update-settings', { wordsPerPlayer: e.target.value });
-});
-
-document.getElementById('setting-duration').addEventListener('change', (e) => {
-  socket.emit('update-settings', { turnDuration: e.target.value });
-});
-
-// Oyunu başlat (admin)
-document.getElementById('btn-start-game').addEventListener('click', () => {
-  socket.emit('start-game');
-});
-
-// ═══════════════════════════════════════════
-// OYUN EKRANI — Olay dinleyicileri
-// ═══════════════════════════════════════════
-
-// Anlatıcı "Başla" butonuna bastı
-document.getElementById('btn-start-turn').addEventListener('click', () => {
-  socket.emit('describer-ready');
-});
-
-// Doğru butonu
-document.getElementById('btn-correct').addEventListener('click', () => {
-  socket.emit('word-correct');
-});
-
-// Ses açma/kapama
-document.getElementById('btn-mute').addEventListener('click', () => {
-  state.isMuted = !state.isMuted;
-  localStorage.setItem('muted', state.isMuted);
-  document.getElementById('btn-mute').textContent = state.isMuted ? '🔇' : '🔊';
-});
-
-// Ses butonunu başlangıçta ayarla
-document.getElementById('btn-mute').textContent = state.isMuted ? '🔇' : '🔊';
-
-// ═══════════════════════════════════════════
-// FAZ GEÇİŞ EKRANI — Olay dinleyicileri
-// ═══════════════════════════════════════════
-
-document.getElementById('btn-next-phase').addEventListener('click', () => {
-  socket.emit('next-phase');
-});
-
-// ═══════════════════════════════════════════
-// OYUN SONU — Olay dinleyicileri
-// ═══════════════════════════════════════════
-
-document.getElementById('btn-new-game').addEventListener('click', () => {
-  socket.emit('return-to-lobby');
-});
-
-document.getElementById('btn-go-home').addEventListener('click', () => {
-  location.reload();
-});
-
-// ═══════════════════════════════════════════
-// Socket.IO — Olay işleyicileri
-// ═══════════════════════════════════════════
-
-// Bağlantı kurulduğunda socket ID'yi kaydet
-socket.on('connect', () => {
-  state.mySocketId = socket.id;
-});
-
-// Oda oluşturuldu
-socket.on('room-created', ({ roomCode }) => {
-  state.roomCode = roomCode;
-  state.isAdmin = true;
-  localStorage.setItem('lastRoomCode', roomCode);
-  localStorage.setItem('lastNickname', state.nickname);
-  showScreen('lobby-screen');
-});
-
-// Hata mesajı
-socket.on('error', ({ message }) => {
-  showToast(message);
-});
-
-// Ses çal
-socket.on('play-sound', ({ soundType }) => {
-  if (SoundEffects[soundType]) {
-    SoundEffects[soundType]();
-  }
-});
-
-// Timer güncellemesi
-socket.on('timer-update', ({ timeRemaining }) => {
-  const timerEl = document.getElementById('game-timer');
-  timerEl.textContent = timeRemaining;
-
-  // Son 10 saniye uyarısı
-  if (timeRemaining <= 10) {
-    timerEl.classList.add('warning');
+async function restore() {
+  if (!state.session || state.restoring) return;
+  state.restoring = true;
+  setConnection('Masadaki yerine geri bağlanılıyor…');
+  const result = await command('resume', state.session, { restoring: true, quiet: true });
+  state.restoring = false;
+  if (!socket.connected) return;
+  if (result?.ok) {
+    setConnection('');
+    if (state.dirty) scheduleDraft();
+  } else if (result && ['SESSION_GONE', 'ROOM_GONE'].includes(result.code)) {
+    clearSession();
+    setConnection('');
+    toast(result.error);
   } else {
-    timerEl.classList.remove('warning');
+    setConnection('Bağlantı kurulamadı.');
+    const retry = node('button', 'secondary', 'Tekrar bağlan');
+    retry.onclick = restore;
+    $('connection').append(retry);
+    $('restore-box').hidden = false;
+    if (socket.connected && result?.code === 'TIMEOUT')
+      setTimeout(() => {
+        if (state.session && !state.restoring && !state.replaced) restore();
+      }, 2000);
   }
+}
+$('restore-box').hidden = !state.session;
+$('restore-button').onclick = restore;
+$('forget-button').onclick = async () => {
+  if (
+    await ask(
+      'Oturum kaydı unutulsun mu?',
+      'Bu sekmedeki geri dönüş anahtarı silinir. Devam eden oyuna aynı oyuncu olarak dönemeyebilirsin.',
+      'Kaydı unut',
+    )
+  ) {
+    clearSession();
+    setConnection('');
+  }
+};
+socket.on('connect', async () => {
+  if (state.replaced) return;
+  if (state.session) await restore();
+  else setConnection('');
 });
-
-// Kelime (sadece anlatıcıya)
-socket.on('new-word', ({ word }) => {
-  state.currentWord = word;
-  const wordEl = document.getElementById('current-word');
-  wordEl.textContent = word;
-  // Kelime değişim animasyonu
-  wordEl.classList.remove('word-success');
-  void wordEl.offsetWidth; // reflow tetikle
-  wordEl.style.animation = 'none';
-  void wordEl.offsetWidth;
-  wordEl.style.animation = '';
+socket.on('disconnect', () => {
+  if (!state.replaced)
+    setConnection('Bağlantı kesildi. Yeniden bağlanıyoruz; yazdıkların bu sekmede duruyor.');
 });
-
-// Kelime doğru bilindi
-socket.on('word-guessed', ({ newScore, wordsRemaining }) => {
-  // Başarı animasyonu
-  const wordEl = document.getElementById('current-word');
-  wordEl.classList.add('word-success');
-  setTimeout(() => wordEl.classList.remove('word-success'), 300);
+socket.on('connect_error', () => {
+  setConnection(
+    'Sunucuya ulaşılamıyor. İnternet bağlantını kontrol et; otomatik tekrar deniyoruz.',
+  );
 });
-
-// Anlatıcıya sıra geldi
-socket.on('your-turn', ({ phase, phaseRule }) => {
-  // Ekranın oyun ekranında olduğundan emin ol
-  if (state.currentScreen !== 'game-screen') {
+socket.on('session-replaced', () => {
+  state.replaced = true;
+  socket.disconnect();
+  clearSession();
+  setConnection('Bu oturum başka bir bağlantıda açıldı. Burada devam etmek için sayfayı yenile.');
+});
+socket.on('room-left', ({ kicked, expired }) => {
+  clearSession();
+  toast(
+    kicked
+      ? 'Yönetici seni odadan çıkardı.'
+      : expired
+        ? 'Odanın süresi doldu.'
+        : 'Odadan ayrıldın.',
+  );
+});
+socket.on('room-state', (room) => {
+  const old = state.room;
+  if (old?.code === room.code && room.version < old.version) return;
+  state.room = room;
+  if (old?.game && room.game) {
+    if (room.game.scores.red + room.game.scores.blue > old.game.scores.red + old.game.scores.blue)
+      sound();
+    else if (room.game.turnId !== old.game.turnId) sound('turn');
+  }
+  if (room.status === 'lobby') {
+    showScreen('lobby-screen');
+    renderLobby(room, old);
+  } else {
     showScreen('game-screen');
+    renderGame(room);
   }
 });
-
-// Tur sonu
-socket.on('turn-end', ({ nextDescriber, nextTeam }) => {
-  state.currentWord = null;
-});
-
-// Faz sonu
-socket.on('phase-end', ({ phaseNumber, scores, phaseScores, nextPhase, nextPhaseRule, timeRemaining }) => {
-  document.getElementById('phase-complete-title').textContent = `🎉 Faz ${phaseNumber} Tamamlandı!`;
-  document.getElementById('pt-score-red').textContent = scores.red;
-  document.getElementById('pt-score-blue').textContent = scores.blue;
-
-  const phaseInfo = getPhaseInfo(nextPhase);
-  document.getElementById('next-phase-name').textContent = `Sıradaki: Faz ${nextPhase} — ${phaseInfo.name}`;
-  document.getElementById('next-phase-rule').textContent = nextPhaseRule.rule;
-
-  showScreen('phase-transition-screen');
-});
-
-// Oyun bitti
-socket.on('game-over', ({ finalScores, phaseScores, winner }) => {
-  // Kazanan gösterimi
-  const winnerText = document.getElementById('winner-text');
-  const winnerDisplay = document.getElementById('winner-display');
-
-  if (winner === 'red') {
-    winnerText.textContent = '🏆 Kırmızı Takım Kazandı!';
-    winnerText.className = 'winner-text winner-red';
-  } else if (winner === 'blue') {
-    winnerText.textContent = '🏆 Mavi Takım Kazandı!';
-    winnerText.className = 'winner-text winner-blue';
-  } else {
-    winnerText.textContent = '🤝 Berabere!';
-    winnerText.className = 'winner-text winner-draw';
-  }
-
-  // Animasyonu yeniden başlat
-  winnerDisplay.style.animation = 'none';
-  void winnerDisplay.offsetWidth;
-  winnerDisplay.style.animation = '';
-
-  // Puanlar
-  document.getElementById('go-score-red').textContent = finalScores.red;
-  document.getElementById('go-score-blue').textContent = finalScores.blue;
-
-  // Faz tablosu
-  const tbody = document.getElementById('phase-table-body');
-  tbody.innerHTML = '';
-  const phaseNames = ['Kelime Anlat', 'Tek Kelime', 'Sessiz Sinema', 'Ses ile Anlat'];
-  for (let i = 1; i <= 4; i++) {
-    const row = document.createElement('tr');
-    const ps = phaseScores[i] || { red: 0, blue: 0 };
-    row.innerHTML = `<td>${phaseNames[i - 1]}</td><td>${ps.red}</td><td>${ps.blue}</td>`;
-    tbody.appendChild(row);
-  }
-
-  // Toplam satırı
-  const totalRow = document.createElement('tr');
-  totalRow.innerHTML = `<td><strong>Toplam</strong></td><td><strong>${finalScores.red}</strong></td><td><strong>${finalScores.blue}</strong></td>`;
-  tbody.appendChild(totalRow);
-
-  showScreen('game-over-screen');
-});
-
-// Oyun başladı
-socket.on('game-started', () => {
-  showScreen('game-screen');
-});
-
-// Yeni admin
-socket.on('new-admin', ({ nickname }) => {
-  if (nickname === state.nickname) {
-    state.isAdmin = true;
-    showToast('Sen artık Admin\'sin! ⭐');
-  }
-});
-
-// Oyuncu koptu
-socket.on('player-disconnected', ({ nickname }) => {
-  showToast(`${nickname} bağlantısı koptu...`);
-});
-
-// ═══════════════════════════════════════════
-// room-state — Ana durum güncelleyici
-// ═══════════════════════════════════════════
-
-socket.on('room-state', (roomState) => {
-  state.roomState = roomState;
-  state.roomCode = roomState.code;
-  state.isAdmin = roomState.admin === state.mySocketId;
-
-  // localStorage güncelle
-  localStorage.setItem('lastRoomCode', roomState.code);
-  localStorage.setItem('lastNickname', state.nickname);
-
-  // Hangi ekrandayız?
-  if (roomState.status === 'lobby') {
-    if (state.currentScreen === 'home-screen') {
-      showScreen('lobby-screen');
-    }
-    renderLobby(roomState);
-  } else if (roomState.status === 'playing') {
-    if (state.currentScreen !== 'game-screen') {
-      showScreen('game-screen');
-    }
-    renderGame(roomState);
-  } else if (roomState.status === 'phase-transition') {
-    renderPhaseTransition(roomState);
-  } else if (roomState.status === 'game-over') {
-    renderGameOver(roomState);
-  } else if (roomState.status === 'paused') {
-    if (state.currentScreen !== 'game-screen') {
-      showScreen('game-screen');
-    }
-    renderGame(roomState);
-    showToast('Oyun duraklatıldı — oyuncu bekleniyor...');
-  }
-});
-
-// ═══════════════════════════════════════════
-// Render fonksiyonları
-// ═══════════════════════════════════════════
-
-function findMyself() {
-  if (!state.roomState) return null;
-  const allPlayers = [...state.roomState.teams.red, ...state.roomState.teams.blue];
-  return allPlayers.find(p => p.id === state.mySocketId);
+function me(room = state.room) {
+  return room?.players.find((p) => p.id === room.me);
 }
-
-function findMyTeam() {
-  if (!state.roomState) return null;
-  if (state.roomState.teams.red.some(p => p.id === state.mySocketId)) return 'red';
-  if (state.roomState.teams.blue.some(p => p.id === state.mySocketId)) return 'blue';
-  return null;
+function isAdmin(room = state.room) {
+  return room?.adminId === room?.me;
 }
-
-// ─── Lobi render ───
-function renderLobby(rs) {
-  // Oda kodu
-  document.getElementById('lobby-room-code').textContent = rs.code;
-
-  // Ayarlar
-  const settingsSection = document.getElementById('settings-section');
-  if (state.isAdmin) {
-    settingsSection.style.display = '';
-    document.getElementById('setting-words').value = rs.settings.wordsPerPlayer;
-    document.getElementById('setting-duration').value = rs.settings.turnDuration;
-    document.getElementById('setting-words').disabled = false;
-    document.getElementById('setting-duration').disabled = false;
-  } else {
-    // Ayarları göster ama düzenlemeyi engelle
-    settingsSection.style.display = '';
-    document.getElementById('setting-words').value = rs.settings.wordsPerPlayer;
-    document.getElementById('setting-duration').value = rs.settings.turnDuration;
-    document.getElementById('setting-words').disabled = true;
-    document.getElementById('setting-duration').disabled = true;
-  }
-
-  // Takım listeleri
-  renderTeamList('team-red-list', rs.teams.red, 'red', rs);
-  renderTeamList('team-blue-list', rs.teams.blue, 'blue', rs);
-
-  // Minimum oyuncu uyarısı
-  const warning = document.getElementById('min-players-warning');
-  if (rs.teams.red.length < 2 || rs.teams.blue.length < 2) {
-    warning.style.display = 'block';
-  } else {
-    warning.style.display = 'none';
-  }
-
-  // Kelime yazma butonu — gönderdiyse devre dışı
-  const me = findMyself();
-  const writeBtn = document.getElementById('btn-write-words');
-  if (me && me.wordsSubmitted) {
-    writeBtn.textContent = '✅ Kelimeler Gönderildi';
-    writeBtn.disabled = true;
-  } else {
-    writeBtn.textContent = '✏️ Kelimelerimi Yaz';
-    writeBtn.disabled = false;
-  }
-
-  // Oyunu başlat butonu (admin)
-  const startBtn = document.getElementById('btn-start-game');
-  if (state.isAdmin) {
-    startBtn.style.display = 'block';
-    const canStart = rs.teams.red.length >= 2 && rs.teams.blue.length >= 2 &&
-      [...rs.teams.red, ...rs.teams.blue].every(p => p.wordsSubmitted);
-    startBtn.disabled = !canStart;
-  } else {
-    startBtn.style.display = 'none';
-  }
-}
-
-function renderTeamList(containerId, players, teamColor, rs) {
-  const container = document.getElementById(containerId);
-  container.innerHTML = '';
-
-  players.forEach(player => {
-    const li = document.createElement('li');
-    li.className = 'player-item';
-
-    // Bağlantı kopuksa soluk göster
-    if (!player.connected) {
-      li.style.opacity = '0.4';
-    }
-
-    let nameHtml = `<span class="player-name">`;
-    // Admin ikonu
-    if (player.id === rs.admin) {
-      nameHtml += '⭐ ';
-    }
-    // Sıradaki anlatıcı oku
-    if (rs.game && rs.game.turnOrder) {
-      const isCurrentDescriber =
-        rs.game.currentDescriberTeam === teamColor &&
-        rs.game.turnOrder[teamColor][rs.game.currentDescriberIndex[teamColor]] === player.nickname;
-      if (isCurrentDescriber) {
-        nameHtml += '→ ';
+function renderPlayers(target, players, room, game = false) {
+  // Rebuild only when roster/progress changes; timer ticks must not steal keyboard focus.
+  const signature = JSON.stringify([players, room.adminId, room.me, room.game?.describerId, game]);
+  if (target.dataset.signature === signature) return;
+  target.dataset.signature = signature;
+  target.replaceChildren();
+  if (!players.length) target.append(node('li', 'empty-team', 'İlk takım arkadaşını bekliyor.'));
+  for (const p of players) {
+    const li = node('li', `player-row${p.connected ? '' : ' offline'}`);
+    const avatar = node('span', 'player-avatar');
+    avatar.append(avatarImage(p.avatar));
+    avatar.setAttribute('aria-hidden', 'true');
+    li.append(avatar);
+    const detail = node('span', 'player-detail');
+    detail.append(node('span', 'player-name', `${p.nickname}${p.id === room.me ? ' (sen)' : ''}`));
+    const labels = [];
+    if (p.id === room.adminId) labels.push('Yönetici');
+    if (!p.connected) labels.push('Geri bağlanıyor');
+    else if (game)
+      labels.push(
+        `${p.team === 'red' ? 'Kırmızı' : 'Mavi'}${p.id === room.game.describerId ? ' · Anlatıcı' : ''}`,
+      );
+    else labels.push(p.submitted ? 'Hazır' : p.count ? 'Yazıyor' : 'Henüz yazmadı');
+    detail.append(node('span', 'player-meta', labels.join(' · ')));
+    li.append(detail);
+    if (!game)
+      li.append(
+        node(
+          'span',
+          'player-count',
+          `${p.count}/${room.settings.wordsPerPlayer}${p.submitted ? ' ✓' : ''}`,
+        ),
+      );
+    if (isAdmin(room) && p.id !== room.me) {
+      const actions = node('span', 'player-actions');
+      const kick = node('button', 'quiet danger', 'Çıkar');
+      kick.setAttribute('aria-label', `${p.nickname} adlı oyuncuyu çıkar`);
+      kick.onclick = async () => {
+        if (
+          await ask(
+            'Oyuncu çıkarılsın mı?',
+            `${p.nickname} odadan ayrılacak. Oyun başladıysa yazdığı kelimeler havuzda kalır.`,
+            'Oyuncuyu çıkar',
+          )
+        )
+          await command('kick', { playerId: p.id });
+      };
+      actions.append(kick);
+      if (!game && p.connected) {
+        const transfer = node('button', 'quiet', 'Yönetici yap');
+        transfer.setAttribute('aria-label', `Yöneticiliği ${p.nickname} adlı oyuncuya ver`);
+        transfer.onclick = async () => {
+          if (
+            await ask(
+              'Yöneticilik devredilsin mi?',
+              `${p.nickname} oda ayarlarını ve itirazları yönetecek.`,
+              'Devret',
+            )
+          )
+            await command('transfer-admin', { playerId: p.id });
+        };
+        actions.prepend(transfer);
       }
+      const menu = node('details', 'player-menu');
+      const toggle = node('summary', '', '⋯');
+      toggle.setAttribute('aria-label', `${p.nickname} oyuncu işlemleri`);
+      toggle.setAttribute('role', 'button');
+      toggle.setAttribute('aria-expanded', 'false');
+      actions.id = `player-actions-${target.id}-${p.id}`;
+      toggle.setAttribute('aria-controls', actions.id);
+      menu.append(toggle, actions);
+      menu.ontoggle = () => {
+        toggle.setAttribute('aria-expanded', String(menu.open));
+        if (menu.open)
+          document.querySelectorAll('.player-menu[open]').forEach((other) => {
+            if (other !== menu) other.open = false;
+          });
+      };
+      li.append(menu);
     }
-    nameHtml += player.nickname;
-    nameHtml += '</span>';
-
-    // Durum ikonu
-    let statusHtml = '<span class="player-status">';
-    if (player.wordsSubmitted) {
-      statusHtml += '✅';
-    } else {
-      statusHtml += '⏳';
-    }
-    statusHtml += '</span>';
-
-    // Admin: Kick butonu (kendini atmaz)
-    let kickHtml = '';
-    if (state.isAdmin && player.id !== state.mySocketId) {
-      kickHtml = `<button class="player-kick" data-nickname="${player.nickname}">✕</button>`;
-    }
-
-    li.innerHTML = nameHtml + statusHtml + kickHtml;
-    container.appendChild(li);
-  });
-
-  // Kick butonları için olay dinleyicileri
-  container.querySelectorAll('.player-kick').forEach(btn => {
-    btn.addEventListener('click', () => {
-      socket.emit('kick-player', { targetNickname: btn.dataset.nickname });
-    });
-  });
-}
-
-// ─── Oyun ekranı render ───
-function renderGame(rs) {
-  if (!rs.game) return;
-
-  const game = rs.game;
-  const myTeam = findMyTeam();
-  const amDescriber = game.currentDescriberNickname === state.nickname &&
-    game.currentDescriberTeam === myTeam;
-
-  // HUD güncellemeleri
-  document.getElementById('hud-score-red').textContent = game.scores.red;
-  document.getElementById('hud-score-blue').textContent = game.scores.blue;
-
-  const phaseInfo = getPhaseInfo(game.currentPhase);
-  document.getElementById('hud-phase').textContent = `Faz ${game.currentPhase}/4: ${phaseInfo.name}`;
-  document.getElementById('hud-words-left').textContent = `Havuzda ${game.wordsRemaining} kelime`;
-
-  // Aktif anlatıcı
-  const describerTeamIcon = game.currentDescriberTeam === 'red' ? '🔴' : '🔵';
-  document.getElementById('hud-active-describer').textContent =
-    `${describerTeamIcon} ${game.currentDescriberNickname} anlatıyor`;
-
-  // Faz kuralı banner
-  document.getElementById('phase-rule-text').textContent = `${phaseInfo.icon} ${phaseInfo.name}`;
-
-  // Timer
-  const timerEl = document.getElementById('game-timer');
-  timerEl.textContent = game.timeRemaining;
-  if (game.timeRemaining <= 10 && game.timerRunning) {
-    timerEl.classList.add('warning');
-  } else {
-    timerEl.classList.remove('warning');
+    target.append(li);
   }
-
-  // Tüm rol görünümlerini gizle
-  const roleViews = ['describer-waiting', 'describer-active', 'guesser-view', 'spectator-view', 'waiting-view', 'phase-countdown-view'];
-  roleViews.forEach(id => document.getElementById(id).style.display = 'none');
-
-  // Faz geri sayımı varsa (3-2-1)
-  if (game.phaseCountdown > 0) {
-    document.getElementById('phase-countdown-view').style.display = 'flex';
-    document.getElementById('countdown-number').textContent = game.phaseCountdown;
+}
+document.addEventListener('click', (event) => {
+  document.querySelectorAll('.player-menu[open]').forEach((menu) => {
+    if (!menu.contains(event.target)) menu.open = false;
+  });
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape')
+    document.querySelectorAll('.player-menu[open]').forEach((menu) => {
+      menu.open = false;
+      menu.querySelector('summary').focus();
+    });
+});
+function renderLobby(room, previous) {
+  state.playSignature = '';
+  const myself = me(room);
+  const admin = isAdmin(room);
+  const total = room.players.length * room.settings.wordsPerPlayer,
+    count = room.players.reduce((n, p) => n + p.count, 0);
+  $('lobby-code').textContent = room.code;
+  $('lobby-notice').textContent = room.notice;
+  $('player-count').textContent = `${room.players.length} kişi`;
+  $('pool-count').textContent = count;
+  $('pool-target').textContent = ` / ${total} kelime`;
+  $('pool-remaining').textContent =
+    total - count
+      ? `${total - count} kâğıt daha bekleniyor`
+      : 'Fanus doldu. Son onaylar bekleniyor.';
+  $('lobby-jar').setAttribute('aria-label', `Fanusta ${total} kelimeden ${count} tanesi var.`);
+  papers($('lobby-papers'), count, total);
+  $('my-progress').textContent = `${myself.count}/${room.settings.wordsPerPlayer}`;
+  for (const team of ['red', 'blue']) {
+    const players = room.players.filter((p) => p.team === team);
+    $(team + '-count').textContent = `${players.length} kişi`;
+    renderPlayers($(team + '-players'), players, room);
+  }
+  $('setting-words').value = room.settings.wordsPerPlayer;
+  $('setting-duration').value = room.settings.turnDuration;
+  $('setting-words').disabled = !admin;
+  $('setting-duration').disabled = !admin;
+  document.querySelectorAll('#lobby-screen .admin-control').forEach((el) => {
+    el.hidden = !admin;
+  });
+  const enough = ['red', 'blue'].every(
+    (team) => room.players.filter((p) => p.team === team && p.connected).length >= 2,
+  );
+  const pending = room.players.filter((p) => !p.submitted || !p.connected);
+  $('start-game').disabled = !enough || pending.length > 0;
+  $('start-reason').textContent = !enough
+    ? 'Başlamak için her takımda en az iki bağlı kişi olmalı.'
+    : pending.length
+      ? `${pending.length} kişinin bağlantısı veya kelime onayı bekleniyor.`
+      : admin
+        ? 'Herkes hazır. Fanusu karıştırma zamanı!'
+        : 'Herkes hazır. Yönetici oyunu başlatacak.';
+  if (!pending.length) $('pool-remaining').textContent = 'Bütün kâğıtlar hazır!';
+  const key = `kh-draft:${room.code}:${room.me}:${room.wordsVersion}`;
+  if (state.draftKey !== key) {
+    const carry =
+      previous?.status === 'lobby' &&
+      previous.code === room.code &&
+      previous.wordsVersion !== room.wordsVersion
+        ? [...state.draft]
+        : null;
+    clearTimeout(draftTimer);
+    if (state.draftKey) storage.remove(state.draftKey);
+    state.draftKey = key;
+    const local = storage.read(key, null);
+    state.draft = Array.from(
+      { length: room.settings.wordsPerPlayer },
+      (_, i) => carry?.[i] ?? local?.words?.[i] ?? room.myWords[i] ?? '',
+    );
+    state.dirty =
+      !myself.submitted &&
+      (!!local?.dirty || (!!carry && state.draft.some((w, i) => w !== (room.myWords[i] || ''))));
+    $('word-inputs').replaceChildren();
+    state.draft.forEach((word, i) => {
+      const row = node('div', 'word-row');
+      const label = node('label', '', `${String(i + 1).padStart(2, '0')}`);
+      label.htmlFor = `word-${i}`;
+      const input = node('input');
+      input.id = `word-${i}`;
+      input.name = `word-${i}`;
+      input.setAttribute('aria-label', `${i + 1}. kelime veya ifade`);
+      input.maxLength = 40;
+      input.autocomplete = 'off';
+      input.placeholder = [
+        'Bir nesne…',
+        'Bir karakter…',
+        'Bir yer…',
+        'Bir hareket…',
+        'Aklına gelen bir şey…',
+      ][i % 5];
+      input.value = word;
+      input.oninput = () => {
+        state.draft[i] = input.value;
+        state.dirty = true;
+        state.editNumber++;
+        storage.write(state.draftKey, { words: state.draft, dirty: true });
+        $('draft-status').textContent = 'Kaydediliyor…';
+        scheduleDraft();
+        updateSubmit();
+      };
+      input.onkeydown = (event) => {
+        if (event.key === 'Enter' && i < state.draft.length - 1) {
+          event.preventDefault();
+          $(`word-${i + 1}`).focus();
+        }
+      };
+      row.append(label, input);
+      $('word-inputs').append(row);
+    });
+    if (state.dirty) scheduleDraft();
+  }
+  $('words-form').hidden = myself.submitted;
+  $('submitted-box').hidden = !myself.submitted;
+  $('writing-hint').hidden = myself.submitted;
+  updateSubmit();
+}
+function updateSubmit() {
+  $('submit-words').disabled = !state.draft.every((w) => w.trim()) || !socket.connected;
+}
+function scheduleDraft() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => saveWords(false), 500);
+}
+async function saveWords(submitted) {
+  if (!state.room || state.room.status !== 'lobby') return;
+  const number = state.editNumber;
+  const key = state.draftKey;
+  const payload = { words: [...state.draft], wordsVersion: state.room.wordsVersion, submitted };
+  const flight = command('save-words', payload, { quiet: !submitted });
+  draftFlight = flight;
+  const result = await flight;
+  if (draftFlight === flight) draftFlight = null;
+  if (result?.ok && key === state.draftKey && number === state.editNumber) {
+    state.dirty = false;
+    storage.write(key, { words: state.draft, dirty: false });
+    $('draft-status').textContent = 'Kaydedildi. Kelimelerini yalnızca sen görebilirsin.';
+  } else if (result && !result.ok) {
+    $('draft-status').textContent = result.error;
+  } else if (state.dirty && socket.connected) scheduleDraft();
+  return result;
+}
+$('words-form').onsubmit = async (event) => {
+  event.preventDefault();
+  clearTimeout(draftTimer);
+  $('submit-words').disabled = true;
+  if (draftFlight) await draftFlight;
+  clearTimeout(draftTimer);
+  const result = await saveWords(true);
+  if (!result?.ok) {
+    updateSubmit();
+    if (!result) toast('Taslak kaydı tamamlanınca tekrar onayla.');
+  }
+};
+$('edit-words').onclick = async () => {
+  await saveWords(false);
+};
+$('switch-team').onclick = () => command('switch-team');
+$('shuffle-teams').onclick = async () => {
+  if (
+    await ask(
+      'Takımlar karıştırılsın mı?',
+      'Herkes rastgele iki takıma dağılır. Kelimeleriniz korunur.',
+      'Karıştır',
+    )
+  )
+    await command('shuffle-teams');
+};
+$('start-game').onclick = () => command('start-game');
+$('setting-words').onchange = async () => {
+  const value = Number($('setting-words').value);
+  const room = state.room;
+  if (
+    room.players.some((p) => p.count) &&
+    !(await ask(
+      'Kelime adedi değişsin mi?',
+      'Yazılmış kelimeler yeni sınıra kadar korunur. Azaltırsan son alanlar silinir. Herkes yeniden onaylamalı.',
+      'Değiştir',
+    ))
+  ) {
+    $('setting-words').value = room.settings.wordsPerPlayer;
     return;
   }
-
-  // Ben anlatıcıyım
-  if (amDescriber) {
-    if (!game.describerReady && !game.timerRunning) {
-      // Başla butonunu göster
-      document.getElementById('describer-waiting').style.display = 'flex';
-      const ruleDetail = document.getElementById('waiting-phase-rule');
-      ruleDetail.textContent = `${phaseInfo.icon} ${phaseInfo.name}`;
-    } else if (game.timerRunning) {
-      // Aktif anlatıcı — kelime + doğru butonu
-      document.getElementById('describer-active').style.display = 'flex';
-      if (state.currentWord) {
-        document.getElementById('current-word').textContent = state.currentWord;
-      }
-    } else {
-      // Bekleme (örn. faz geçişi sonrası)
-      document.getElementById('waiting-view').style.display = 'flex';
-      document.getElementById('waiting-msg').textContent = 'Hazırlanıyor...';
-    }
+  await command('settings', { wordsPerPlayer: value, version: state.room.version });
+};
+for (const id of ['setting-duration', 'game-duration'])
+  $(id).onchange = async () => {
+    const result = await command('settings', {
+      turnDuration: Number($(id).value),
+      version: state.room.version,
+    });
+    if (result?.ok && state.room.status !== 'lobby') toast('Süre sonraki yeni turda uygulanacak.');
+  };
+$('copy-invite').onclick = async () => {
+  const link = `${location.origin}/?room=${state.room.code}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    toast('Davet bağlantısı kopyalandı. Arkadaşlarına gönder!');
+  } catch {
+    toast(`Kopyalama kullanılamıyor. Oda kodu: ${state.room.code}`);
   }
-  // Takım arkadaşım anlatıyor
-  else if (game.currentDescriberTeam === myTeam) {
-    if (game.timerRunning) {
-      document.getElementById('guesser-view').style.display = 'flex';
-    } else {
-      document.getElementById('waiting-view').style.display = 'flex';
-      document.getElementById('waiting-msg').textContent = `${game.currentDescriberNickname} hazırlanıyor...`;
-    }
-  }
-  // Rakip takım anlatıyor
-  else {
-    if (game.timerRunning) {
-      document.getElementById('spectator-view').style.display = 'flex';
-      const teamName = game.currentDescriberTeam === 'red' ? 'Kırmızı' : 'Mavi';
-      document.getElementById('spectator-info').textContent =
-        `${game.currentDescriberNickname} ${teamName} takım için anlatıyor...`;
-    } else {
-      document.getElementById('waiting-view').style.display = 'flex';
-      document.getElementById('waiting-msg').textContent = `${game.currentDescriberNickname} hazırlanıyor...`;
-    }
+};
+async function leave() {
+  if (
+    await ask(
+      'Masadan ayrılmak istiyor musun?',
+      'Bu oyuncu kaydı silinecek. Oyun başladıysa sonraki oyuna kadar yeniden katılamazsın.',
+      'Odadan ayrıl',
+    )
+  ) {
+    const result = await command('leave');
+    if (result?.ok) clearSession();
   }
 }
-
-// ─── Faz geçişi render ───
-function renderPhaseTransition(rs) {
-  if (state.currentScreen !== 'phase-transition-screen') {
-    showScreen('phase-transition-screen');
+$('leave-lobby').onclick = leave;
+$('leave-game').onclick = leave;
+$('pause-game').onclick = () => command('pause-game');
+$('reset-game').onclick = async () => {
+  if (
+    await ask(
+      'Oyun bitirilsin mi?',
+      'Puanlar ve bu oyunun kelimeleri silinir. Herkes yeni kelimeler yazmak için lobiye döner.',
+      'Lobiye dön',
+    )
+  )
+    await command('return-lobby');
+};
+function message(character, title, description) {
+  const box = node('div', 'stage-message');
+  box.append(
+    avatars.includes(character)
+      ? avatarImage(character, 'character portrait')
+      : node('div', 'character', character),
+    node('h2', '', title),
+    node('p', '', description),
+  );
+  return box;
+}
+function renderGame(room) {
+  const g = room.game,
+    myself = me(room),
+    admin = isAdmin(room),
+    narrator = room.players.find((p) => p.id === g.describerId);
+  const describes = myself.id === g.describerId,
+    opponent = myself.team !== g.team;
+  $('game-room').textContent = `Oda ${room.code}`;
+  $('phase-title').textContent = g.rule.name;
+  $('score-red').textContent = g.scores.red;
+  $('score-blue').textContent = g.scores.blue;
+  if ($('phase-track').dataset.phase !== String(g.phase)) {
+    $('phase-track').dataset.phase = g.phase;
+    $('phase-track').replaceChildren(
+      ...phaseNames.map((name, i) => {
+        const li = node(
+          'li',
+          i + 1 === g.phase ? 'active' : i + 1 < g.phase ? 'done' : '',
+          `${i + 1}. ${name}`,
+        );
+        if (i + 1 === g.phase) li.setAttribute('aria-current', 'step');
+        return li;
+      }),
+    );
   }
-
-  // Admin butonu
-  const nextPhaseBtn = document.getElementById('btn-next-phase');
-  const adminWait = document.getElementById('pt-admin-wait');
-
-  if (state.isAdmin) {
-    nextPhaseBtn.style.display = 'block';
-    adminWait.style.display = 'none';
-  } else {
-    nextPhaseBtn.style.display = 'none';
-    adminWait.style.display = 'block';
+  $('role-label').textContent = describes
+    ? 'Sen anlatıyorsun'
+    : opponent
+      ? 'Rakip takım · Hakem sensin'
+      : 'Sen tahmin ediyorsun';
+  $('remaining-count').textContent = `${g.remaining} / ${g.total} kelime kaldı`;
+  const identity = $('describer-label');
+  const identityKey = narrator ? `${narrator.id}:${narrator.avatar}:${g.team}` : '';
+  if (identity.dataset.player !== identityKey) {
+    identity.dataset.player = identityKey;
+    identity.replaceChildren(
+      ...(narrator
+        ? [
+            avatarImage(narrator.avatar),
+            node(
+              'span',
+              '',
+              `${narrator.nickname} · ${g.team === 'red' ? 'Kırmızı' : 'Mavi'} takım`,
+            ),
+          ]
+        : [node('span', '', 'Anlatıcı bekleniyor')]),
+    );
+  }
+  $('timer').textContent = Math.ceil(g.timeMs / 1000);
+  $('timer').classList.toggle('urgent', room.status === 'playing' && g.timeMs <= 10000);
+  $('game-rule').textContent = g.rule.rule;
+  $('game-duration').value = room.settings.turnDuration;
+  $('game-duration').disabled = !admin;
+  document.querySelectorAll('#game-screen .admin-control').forEach((el) => {
+    el.hidden = !admin;
+  });
+  $('pause-game').hidden = !admin || !['playing', 'ready', 'countdown'].includes(room.status);
+  renderPlayers($('game-players'), room.players, room, true);
+  const signature = JSON.stringify([
+    room.status,
+    room.me,
+    room.adminId,
+    g.phase,
+    g.turnId,
+    g.word,
+    g.lastWord,
+    g.challenge,
+    g.scores,
+    g.phaseScores,
+    g.invalid,
+    g.canChallenge,
+    g.reviewMs > 0,
+    room.players.map((p) => [p.id, p.connected]),
+    room.notice,
+  ]);
+  if (state.playSignature === signature) {
+    const counter = $('countdown-number');
+    if (counter) counter.textContent = g.countdown;
+    const review = $('review-time');
+    if (review) review.textContent = `${Math.ceil(g.reviewMs / 1000)} sn itiraz süresi`;
+    return;
+  }
+  state.playSignature = signature;
+  const target = $('play-content');
+  target.replaceChildren();
+  if (room.status === 'ready') {
+    const box = message(
+      narrator?.avatar || 'fox',
+      describes ? 'Sahne senin!' : `${narrator?.nickname || 'Anlatıcı'} hazırlanıyor`,
+      describes
+        ? 'Takım arkadaşların hazır mı? Başlayınca kelimen ve süren açılır.'
+        : 'Anlatıcı başlayınca süre işleyecek.',
+    );
+    if (describes)
+      box.append(
+        actionButton('Hazırım, kelimeyi çek', 'start-turn', { turnId: g.turnId }, 'primary wide'),
+      );
+    target.append(box);
+  } else if (room.status === 'playing') {
+    const card = node('div', `word-card${g.word ? '' : ' hidden-card'}`);
+    if (g.word)
+      card.append(
+        node('span', 'small', describes ? 'Takımına anlat' : 'Kelimeyi sesli söyleme'),
+        node('p', 'word', g.word.word),
+      );
+    else
+      card.append(
+        avatarImage(myself.avatar, 'guessing-portrait'),
+        node('h2', '', 'Kulaklar sende!'),
+        node('p', 'small', 'Takım arkadaşını dinle, aklına geleni söyle.'),
+      );
+    target.append(card);
+    const row = node('div', 'action-row');
+    if (describes)
+      row.append(
+        actionButton(
+          '✓ Bildiler!',
+          'correct',
+          { cardId: g.word.id, turnId: g.turnId },
+          'primary correct-button',
+        ),
+      );
+    else if (opponent) {
+      const b = actionButton(
+        'Anlatım kuralına itiraz et',
+        'challenge',
+        { cardId: g.word.id, turnId: g.turnId },
+        'secondary',
+      );
+      b.disabled = !g.canChallenge;
+      row.append(b);
+    }
+    if (row.childElementCount) target.append(row);
+    target.append(
+      node(
+        'p',
+        'result-note',
+        describes
+          ? 'Pas yok. Bilinmezse süre bitince kelime fanusta kalır.'
+          : opponent
+            ? 'Yalnızca anlatım kuralı ihlal edilirse itiraz et. Süre durur, yönetici karar verir.'
+            : 'Doğru tahmini anlatıcı işaretler. Her doğru 1 puan.',
+      ),
+    );
+  } else if (room.status === 'paused') {
+    const box = message('⏸', 'Masa seni bekler.', room.notice);
+    if (admin) {
+      const enough = ['red', 'blue'].every(
+        (team) => room.players.filter((p) => p.team === team && p.connected).length >= 2,
+      );
+      const resume = actionButton('Kaldığımız yerden devam', 'resume-game', {}, 'primary wide');
+      resume.disabled = !enough || !narrator?.connected;
+      box.append(resume);
+      if (resume.disabled)
+        box.append(
+          node(
+            'p',
+            'small',
+            'Eksik oyuncuyu bekle. Geri dönemiyorsa listeden çıkarabilir veya lobiye dönebilirsin.',
+          ),
+        );
+    } else box.append(node('p', 'small', 'Yönetici oyunu devam ettirecek.'));
+    target.append(box);
+  } else if (room.status === 'countdown') {
+    const box = message('owl', 'Hazır mısınız?', 'Kalan süreyle devam ediyoruz.');
+    const count = node('div', 'countdown', g.countdown);
+    count.id = 'countdown-number';
+    box.append(count);
+    target.append(box);
+  } else if (room.status === 'challenge') {
+    const box = message(
+      '!',
+      'Bir saniye, itiraz var.',
+      `${g.challenge.by} anlatım kuralına itiraz etti. Süre durduruldu.`,
+    );
+    if (g.challenge.word) box.append(node('p', 'word', g.challenge.word));
+    if (admin) {
+      box.append(
+        node(
+          'p',
+          'small',
+          'İhlal varsa bu kelime puansız çıkarılır. Son doğru kelimeyse puanı geri alınır.',
+        ),
+      );
+      const row = node('div', 'action-row');
+      row.append(
+        actionButton('İhlal var, sayılmasın', 'resolve-challenge', { invalid: true }),
+        actionButton('İhlal yok', 'resolve-challenge', { invalid: false }, 'secondary'),
+      );
+      box.append(row);
+    } else box.append(node('p', 'small', 'Yönetici iki tarafı dinleyip karar verecek.'));
+    target.append(box);
+  } else if (room.status === 'transition') {
+    const box = message(
+      'frog',
+      'Fanus boşaldı!',
+      `Sıradaki: ${phaseNames[g.phase]}. Aynı kelimeler, yeni anlatım şekli.`,
+    );
+    box.append(
+      node(
+        'p',
+        'small',
+        `${Math.ceil(g.timeMs / 1000)} saniye kaldı. Süre varsa aynı anlatıcı devam eder.`,
+      ),
+    );
+    if (g.reviewMs > 0) {
+      const wait = node('p', 'small', `${Math.ceil(g.reviewMs / 1000)} sn itiraz süresi`);
+      wait.id = 'review-time';
+      box.append(wait);
+    }
+    if (admin) {
+      const b = actionButton('Sonraki aşamaya geç', 'next-phase', {}, 'primary wide');
+      b.disabled = g.reviewMs > 0;
+      box.append(b);
+    } else box.append(node('p', 'small', 'Yönetici sonraki aşamayı başlatacak.'));
+    target.append(box);
+  } else if (room.status === 'finished') {
+    const draw = g.scores.red === g.scores.blue;
+    const box = message(
+      draw ? 'capybara' : 'tiger',
+      draw
+        ? 'Bu masada dostluk kazandı!'
+        : `${g.scores.red > g.scores.blue ? 'Kırmızı' : 'Mavi'} takım kazandı!`,
+      draw
+        ? 'Puanlar eşit. Rövanşa ne dersiniz?'
+        : 'Dört aşama, bir sürü ortak hikâye. Rövanşa var mısınız?',
+    );
+    const table = node('table', 'score-table');
+    table.append(node('caption', '', 'Aşama aşama puanlar'));
+    const head = node('thead'),
+      header = node('tr');
+    ['Aşama', 'Kırmızı', 'Mavi', 'İhlal'].forEach((s) => {
+      const th = node('th', '', s);
+      th.scope = 'col';
+      header.append(th);
+    });
+    head.append(header);
+    table.append(head);
+    const body = node('tbody');
+    g.phaseScores.forEach((scores, i) => {
+      const tr = node('tr');
+      tr.append(
+        node('td', '', phaseNames[i]),
+        node('td', '', scores.red),
+        node('td', '', scores.blue),
+        node('td', '', g.invalid[i]),
+      );
+      body.append(tr);
+    });
+    table.append(body);
+    box.append(table);
+    if (g.reviewMs > 0)
+      box.append(node('p', 'small', 'Son kelimenin itiraz süresi bitince sonuç kesinleşir.'));
+    if (admin) {
+      const button = node('button', 'primary wide', 'Yeni oyun, yeni kelimeler');
+      button.disabled = g.reviewMs > 0;
+      button.onclick = () => command('return-lobby');
+      box.append(button);
+    } else box.append(node('p', 'small', 'Yönetici yeni oyunu açabilir.'));
+    target.append(box);
+  }
+  if (
+    g.lastWord?.reviewable &&
+    ['ready', 'playing', 'paused', 'countdown', 'transition', 'finished'].includes(room.status)
+  ) {
+    const row = node('div', 'review-row');
+    row.append(
+      node('span', '', `Son doğru: ${g.lastWord.word}`),
+      actionButton(
+        'Son doğruya itiraz',
+        'challenge',
+        { cardId: g.lastWord.id, turnId: g.lastWord.turnId },
+        'secondary',
+      ),
+    );
+    target.append(row);
   }
 }
-
-// ─── Oyun sonu render ───
-function renderGameOver(rs) {
-  if (state.currentScreen !== 'game-over-screen') {
-    showScreen('game-over-screen');
-  }
-
-  // Yeni oyun butonu (admin)
-  const newGameBtn = document.getElementById('btn-new-game');
-  if (state.isAdmin) {
-    newGameBtn.style.display = 'block';
-  } else {
-    newGameBtn.style.display = 'none';
-  }
+$('rules-button').onclick = () => $('rules-dialog').showModal();
+document.querySelectorAll('[data-close]').forEach((button) => {
+  button.onclick = () => $(button.dataset.close).close();
+});
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $('theme-button').textContent = theme === 'dark' ? '☀' : '☾';
+  $('theme-button').setAttribute(
+    'aria-label',
+    theme === 'dark' ? 'Gündüz temasını aç' : 'Gece temasını aç',
+  );
+  $('theme-button').setAttribute('aria-pressed', String(theme === 'dark'));
+  document.querySelector('meta[name=theme-color]').content =
+    theme === 'dark' ? '#20262c' : '#f5f6f7';
 }
+applyTheme(storage.read('kh-theme', 'light', true));
+$('theme-button').onclick = () => {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(theme);
+  storage.write('kh-theme', theme, true);
+};
+function renderSound() {
+  $('sound-button').setAttribute('aria-pressed', String(state.sound));
+  $('sound-button').setAttribute(
+    'aria-label',
+    state.sound ? 'Oyun seslerini kapat' : 'Oyun seslerini aç',
+  );
+  $('sound-button').textContent = state.sound ? '♫' : '♪';
+}
+renderSound();
+$('sound-button').onclick = () => {
+  state.sound = !state.sound;
+  storage.write('kh-sound', state.sound, true);
+  renderSound();
+  if (state.sound) sound();
+};
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !socket.connected && !state.replaced) socket.connect();
+});
+window.addEventListener('beforeunload', (event) => {
+  if (state.dirty) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+});
+setConnection('Oyun masasına bağlanılıyor…');
+socket.connect();

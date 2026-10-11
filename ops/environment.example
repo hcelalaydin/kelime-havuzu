@@ -1,0 +1,5 @@
+PORT=3000
+NODE_ENV=production
+STATE_DIR=/var/lib/kelime-havuzu
+APP_ORIGIN=https://kelimehavuzu.pqcrypt.xyz
+TRUST_PROXY_HOPS=1
